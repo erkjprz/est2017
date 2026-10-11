@@ -124,6 +124,9 @@ export default function AdminPage() {
   // after and replaces it with a fresh fetch, so a stale queue never
   // lingers past that first moment.
   const [dataLoading, setDataLoading] = useState(!cached)
+  // The cached queue paints first, but ?signup=/?review= links must wait for
+  // the fresh fetch -- a just-submitted item isn't in the cache yet.
+  const [freshLoaded, setFreshLoaded] = useState(false)
   const checkingAccess = authLoading || dataLoading
 
   // Replaces the old two-tier tab system -- one flat queue, grouped by
@@ -280,6 +283,7 @@ export default function AdminPage() {
     async function checkAdminAccess() {
       await loadData()
       setDataLoading(false)
+      setFreshLoaded(true)
     }
 
     checkAdminAccess()
@@ -289,7 +293,7 @@ export default function AdminPage() {
   // transaction's "Review in Admin queue") open that item's review sheet
   // once the queue has loaded, then drop the param in place.
   useEffect(() => {
-    if (dataLoading) return
+    if (!freshLoaded) return
     const params = new URLSearchParams(window.location.search)
     const id = params.get("signup")
     const txnId = params.get("review")
@@ -299,7 +303,7 @@ export default function AdminPage() {
     if (txnId && pendingTransactions.some((t) => t.transaction_id === txnId)) setReviewingTxnId(txnId)
     window.history.replaceState(null, "", "/admin")
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataLoading])
+  }, [freshLoaded])
 
   const fmt = (n: number) =>
     Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
