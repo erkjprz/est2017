@@ -175,9 +175,14 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                       <div className="mt-3 rounded-md bg-paper px-3.5 py-2.5 flex items-baseline justify-between gap-3">
                         <span className="min-w-0">
                           <span className="block text-[10px] uppercase tracking-wide text-ink-soft font-mono">Next payment</span>
-                          <span className={`block text-[12px] ${next.overdue ? "text-rust font-semibold" : "text-ink-soft"}`}>
-                            {next.overdue ?? (next.dueLabel ? `Due ${next.dueLabel}` : "Due this month")}
-                          </span>
+                          {/* No due day on the loan (older monthly loans) means
+                              no date to show -- just the amount, unless it's
+                              overdue. */}
+                          {(next.overdue || next.dueLabel) && (
+                            <span className={`block text-[12px] ${next.overdue ? "text-rust font-semibold" : "text-ink-soft"}`}>
+                              {next.overdue ?? `Due ${next.dueLabel}`}
+                            </span>
+                          )}
                         </span>
                         <span className="font-mono [font-variant-numeric:tabular-nums] text-base font-bold text-ink whitespace-nowrap">
                           ₱{fmt(next.amount)}
