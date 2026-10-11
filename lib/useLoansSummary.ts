@@ -34,7 +34,15 @@ export type Loan = {
   interest_rate: number
   interest_amount: number
   term_months: number | null
+  repayment_frequency: string | null
+  due_day: number | null
   repaid: number
+  // Submitted repayments still waiting on an admin -- not in `repaid` yet.
+  pendingRepaid: number
+  lastRepaymentDate: string | null
+  // Latest payment still waiting for approval -- the card's next due date
+  // counts it as paid.
+  lastPendingDate: string | null
   totalRepayable: number
   outstanding: number
   transactions: LoanTransaction[]
@@ -90,6 +98,24 @@ export async function fetchLoansSummary(memberId: string): Promise<{ loans: Loan
       .filter((t) => t.classification === "Loan Repayment" && t.status === "approved")
       .reduce((sum, t) => sum + Number(t.amount), 0)
 
+    const pendingRepaid = related
+      .filter((t) => t.classification === "Loan Repayment" && t.status === "pending")
+      .reduce((sum, t) => sum + Number(t.amount), 0)
+    const lastRepaymentDate =
+      related
+        .filter((t) => t.classification === "Loan Repayment" && t.status === "approved")
+        .map((t) => (t.txn_date ?? t.created_at ?? "").slice(0, 10))
+        .filter(Boolean)
+        .sort()
+        .pop() ?? null
+    const lastPendingDate =
+      related
+        .filter((t) => t.classification === "Loan Repayment" && t.status === "pending")
+        .map((t) => (t.txn_date ?? t.created_at ?? "").slice(0, 10))
+        .filter(Boolean)
+        .sort()
+        .pop() ?? null
+
     const interestType: InterestType = loan.interest_type === "amount" ? "amount" : "rate"
     const totalRepayableVal = totalRepayable(
       Number(loan.principal),
@@ -108,7 +134,12 @@ export async function fetchLoansSummary(memberId: string): Promise<{ loans: Loan
       interest_rate: Number(loan.interest_rate ?? 0),
       interest_amount: Number(loan.interest_amount ?? 0),
       term_months: loan.term_months,
+      repayment_frequency: loan.repayment_frequency ?? null,
+      due_day: loan.due_day ?? null,
       repaid,
+      pendingRepaid,
+      lastRepaymentDate,
+      lastPendingDate,
       totalRepayable: totalRepayableVal,
       outstanding: loan.status === "closed" ? 0 : Math.max(0, totalRepayableVal - repaid),
       transactions: related.map((t) => ({

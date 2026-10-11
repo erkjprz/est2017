@@ -449,12 +449,13 @@ const borrowerSections: FaqSection[] = [
     title: "Repaying a loan",
     items: [
       {
-        q: "How do I make a repayment?",
+        q: "How do I make a payment?",
         a: (
           <ol className="list-decimal list-inside space-y-1">
-            <li>From your loan page, tap <strong>Make a Repayment</strong>.</li>
-            <li>Choose which loan it&apos;s for (if you have more than one).</li>
-            <li>Enter the amount and which bank you sent it from.</li>
+            <li>From your loan page, tap <strong>Make a payment</strong>.</li>
+            <li>Send the money to one of the fund&apos;s banks — <strong>Scan to Pay</strong> on your loan page shows where.</li>
+            <li>Enter the amount and which bank you sent it to. It starts at your usual payment; tick{" "}
+              <strong>Remember for next time</strong> to keep the amount and bank for your next one.</li>
             <li>Attach a receipt or screenshot of the transfer.</li>
             <li>Submit — it shows as <strong>pending</strong> until an admin approves it.</li>
           </ol>
@@ -468,14 +469,14 @@ const borrowerSections: FaqSection[] = [
             day after if it hasn&apos;t been paid yet, then every 10 days until it is. Monthly loans are due
             on the loan&apos;s due day each month; a lump-sum loan is due once, at the end of its term. An
             older monthly loan with no due day set instead gets an overdue reminder once 45 days pass
-            without a payment, then every 10 days after that. Reminders pause while a repayment
+            without a payment, then every 10 days after that. Reminders pause while a payment
             you submitted is waiting for approval. Turn on <strong>Push Notifications</strong> to get them on
             your device.
           </p>
         )
       },
       {
-        q: "Why isn't my repayment reflected yet?",
+        q: "Why isn't my payment reflected yet?",
         a: (
           <p>
             It needs an admin to approve it first — that&apos;s what keeps the numbers accurate. Once
@@ -484,13 +485,13 @@ const borrowerSections: FaqSection[] = [
         )
       },
       {
-        q: "I entered the wrong amount — can I fix a repayment I already submitted?",
+        q: "I entered the wrong amount — can I fix a payment I already submitted?",
         a: (
           <p>
-            Yes, as long as it&apos;s still <strong>pending</strong>. Your loan page shows a small{" "}
-            <strong>✎ Edit</strong> button next to any pending repayment — tap it to change the amount,
-            bank, receipt, or description, or to cancel it entirely. Once an admin approves it, it can no
-            longer be changed.
+            Yes, as long as it&apos;s still <strong>pending</strong>. Tap the payment on your loan page, then{" "}
+            <strong>Edit</strong> to change the amount, bank, receipt, or description, or to cancel it
+            entirely. If an admin rejected it, the same screen shows why — tap <strong>Fix &amp; resend</strong>.
+            Once an admin approves it, it can no longer be changed.
           </p>
         )
       },
