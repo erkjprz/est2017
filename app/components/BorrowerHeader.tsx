@@ -76,18 +76,6 @@ function MenuDropdown({ onAccount, onPreferences }: { onAccount: boolean; onPref
             </button>
           )}
           <button
-            onClick={() => go("/notifications")}
-            className="w-full text-left px-4 py-2.5 text-sm text-ink-soft hover:text-ink hover:bg-paper-2 transition-colors border-b border-hairline"
-          >
-            Notifications
-          </button>
-          <button
-            onClick={() => go("/messages")}
-            className="w-full text-left px-4 py-2.5 text-sm text-ink-soft hover:text-ink hover:bg-paper-2 transition-colors border-b border-hairline"
-          >
-            Chat with Est. 2017
-          </button>
-          <button
             onClick={() => go("/help")}
             className="w-full text-left px-4 py-2.5 text-sm text-ink-soft hover:text-ink hover:bg-paper-2 transition-colors border-b border-hairline"
           >

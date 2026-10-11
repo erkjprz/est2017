@@ -62,23 +62,29 @@ export default function BorrowerPage() {
           <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-1">
             {member!.name}
           </h1>
-          <p className="text-[13px] text-ink-soft mb-6">Request a loan, or repay one you already have.</p>
+          <p className="text-[13px] text-ink-soft mb-6">
+            {hasActiveLoan ? "Make a payment, or request a new loan." : "Request a loan to get started."}
+          </p>
 
+          {/* Paying off an active loan is the everyday action, so it leads;
+              without one, requesting a loan is the only thing to do. */}
           <div className="flex gap-2 mb-7">
-            <button
-              onClick={() => router.push("/borrower/request")}
-              className="flex-1 bg-ink text-paper px-4 py-3 rounded-md text-sm font-semibold"
-            >
-              Request a Loan
-            </button>
             {hasActiveLoan && (
               <button
                 onClick={() => router.push("/borrower/repay")}
-                className="flex-1 bg-gold-soft text-ink px-4 py-3 rounded-md text-sm font-semibold"
+                className="flex-1 bg-ink text-paper px-4 py-3 rounded-full text-sm font-semibold"
               >
-                Make a Repayment
+                Make a payment
               </button>
             )}
+            <button
+              onClick={() => router.push("/borrower/request")}
+              className={`flex-1 px-4 py-3 rounded-full text-sm font-semibold ${
+                hasActiveLoan ? "border border-hairline text-ink" : "bg-ink text-paper"
+              }`}
+            >
+              Request a loan
+            </button>
           </div>
 
           <ScanToPayCard />

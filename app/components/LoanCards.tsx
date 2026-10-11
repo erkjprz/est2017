@@ -3,9 +3,12 @@
 import { useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import ReceiptModal from "@/app/components/ReceiptModal"
-import { formatInterestLabel } from "@/lib/loanFormat"
+import { Sheet } from "@/app/components/Sheet"
+import { ReviewRow } from "@/app/components/TransactionFormUI"
+import { ReceiptThumb } from "@/app/components/admin/ReceiptThumb"
+import { formatInterestLabel, nextDueDate, paymentOverdueLabel } from "@/lib/loanFormat"
 import { TRANSACTION_TYPE_LABELS } from "@/lib/transactionLabels"
-import type { Loan } from "@/lib/useLoansSummary"
+import type { Loan, LoanTransaction } from "@/lib/useLoansSummary"
 import { cacheTransactionRow } from "@/lib/transactionRowCache"
 
 // A closed loan isn't always a full repayment -- an admin can close one
@@ -24,12 +27,68 @@ function loanStatusMeta(loan: Loan): { label: string; dot: string; text: string 
 const fmt = (n: number) =>
   Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+// "15 Oct", with the year only when it isn't this year.
+const shortDate = (ms: number) => {
+  const d = new Date(ms)
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(d.getUTCFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}),
+    timeZone: "UTC"
+  })
+}
+
+// What the borrower owes next on an active loan: one installment (total ÷
+// term) for a monthly loan, due on the next due date when one is set; the
+// whole remaining balance for a lump sum, due at the end of the term.
+// Payments still waiting for approval already count against what's left.
+type NextPayment =
+  | { kind: "due"; amount: number; dueLabel: string | null; overdue: string | null }
+  | { kind: "covered" }
+
+function nextPayment(loan: Loan): NextPayment | null {
+  if (loan.status !== "active") return null
+  const remaining = Math.max(0, loan.outstanding - (loan.pendingRepaid ?? 0))
+  if (remaining <= 0.005) return (loan.pendingRepaid ?? 0) > 0 ? { kind: "covered" } : null
+
+  // A payment waiting for approval pauses the overdue flag, the same way
+  // it pauses the overdue reminders -- the borrower already paid; the admin
+  // just hasn't approved it yet.
+  const hasPending = (loan.pendingRepaid ?? 0) > 0
+  const overdue = hasPending
+    ? null
+    : paymentOverdueLabel(
+        loan.status,
+        loan.repayment_frequency,
+        loan.start_date,
+        loan.lastRepaymentDate ?? null,
+        loan.due_day
+      )
+
+  if (loan.repayment_frequency === "monthly" && loan.term_months) {
+    const installment = Math.round((loan.totalRepayable / loan.term_months) * 100) / 100
+    const dueLabel = loan.due_day ? shortDate(nextDueDate(
+          [loan.lastRepaymentDate, loan.lastPendingDate].filter((d): d is string => !!d).sort().pop() ?? loan.start_date,
+          loan.due_day
+        )) : null
+    return { kind: "due", amount: Math.min(installment, remaining), dueLabel, overdue }
+  }
+
+  let dueLabel: string | null = null
+  if (loan.term_months) {
+    const [y, m, d] = loan.start_date.split("-").map(Number)
+    dueLabel = shortDate(Date.UTC(y, m - 1 + loan.term_months, d))
+  }
+  return { kind: "due", amount: remaining, dueLabel, overdue }
+}
+
 // `editable` gates the Edit/Fix & resend actions -- off for the admin
 // "view as" preview, which is read-only.
 export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolean }) {
   const router = useRouter()
   const pathname = usePathname()
   const [openReceiptUrl, setOpenReceiptUrl] = useState<string | null>(null)
+  const [openTxn, setOpenTxn] = useState<LoanTransaction | null>(null)
 
   if (loans.length === 0) {
     return (
@@ -48,9 +107,6 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
           const repaidPct = loan.totalRepayable > 0
             ? Math.min(100, (loan.repaid / loan.totalRepayable) * 100)
             : 0
-          const paidMonths = loan.transactions.filter(
-            (t) => t.classification === "Loan Repayment" && t.status === "approved"
-          ).length
 
           return (
             <div key={loan.loan_id} className="card px-5 py-4">
@@ -98,11 +154,39 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                 </div>
               )}
 
-              {loan.term_months && (
-                <p className="text-[11px] text-ink-soft mt-1.5">
-                  {paidMonths} / {loan.term_months} mo term
-                </p>
-              )}
+              <p className="text-[11px] text-ink-soft mt-1.5 font-mono [font-variant-numeric:tabular-nums]">
+                ₱{fmt(loan.repaid)} of ₱{fmt(loan.totalRepayable)} repaid
+              </p>
+
+              {(() => {
+                const next = nextPayment(loan)
+                const pending = loan.pendingRepaid ?? 0
+                return (
+                  <>
+                    {pending > 0 && (
+                      <p className="text-[12px] text-gold mt-1">₱{fmt(pending)} waiting for approval</p>
+                    )}
+                    {next?.kind === "covered" && (
+                      <p className="mt-3 rounded-md bg-paper px-3.5 py-2.5 text-sm text-ink">
+                        Fully paid once your pending payment is approved.
+                      </p>
+                    )}
+                    {next?.kind === "due" && (
+                      <div className="mt-3 rounded-md bg-paper px-3.5 py-2.5 flex items-baseline justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block text-[10px] uppercase tracking-wide text-ink-soft font-mono">Next payment</span>
+                          <span className={`block text-[12px] ${next.overdue ? "text-rust font-semibold" : "text-ink-soft"}`}>
+                            {next.overdue ?? (next.dueLabel ? `Due ${next.dueLabel}` : "Due this month")}
+                          </span>
+                        </span>
+                        <span className="font-mono [font-variant-numeric:tabular-nums] text-base font-bold text-ink whitespace-nowrap">
+                          ₱{fmt(next.amount)}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
 
               {loan.transactions.length > 0 && (
                 <div className="mt-4 pt-3 border-t border-hairline">
@@ -131,25 +215,24 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                       // this list exists to surface.
                       const isRepayment = t.classification === "Loan Repayment"
 
-                      const canEdit = editable && isRepayment && (t.status === "pending" || t.status === "rejected")
-
                       return (
-                        // Same row shape as Dashboard's Recent Transactions: a
-                        // dashed rule between entries instead of a fixed gap,
-                        // classification as the headline with the date (plus a
-                        // status word, for pending/rejected) as a muted subline.
-                        <div
+                        // Tapping a row opens its detail sheet (receipt,
+                        // status, and Edit / Fix & resend when allowed) --
+                        // same idea as a row on the Transactions page.
+                        <button
                           key={t.transaction_id}
-                          className={`py-3 ${idx !== loan.transactions.length - 1 ? "border-b border-dashed border-hairline" : ""} ${
+                          type="button"
+                          onClick={() => setOpenTxn(t)}
+                          className={`w-full text-left py-3 ${idx !== loan.transactions.length - 1 ? "border-b border-dashed border-hairline" : ""} ${
                             idx === firstOriginIndex && idx > 0 ? "!mt-2" : ""
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className={`text-sm truncate ${isRepayment ? "text-ink" : "text-ink-soft"}`}>
+                          <span className="flex items-center justify-between gap-3">
+                            <span className="min-w-0">
+                              <span className={`block text-sm truncate ${isRepayment ? "text-ink" : "text-ink-soft"}`}>
                                 {TRANSACTION_TYPE_LABELS[t.classification] ?? t.classification}
-                              </p>
-                              <p className="text-[11px] text-ink-soft font-mono">
+                              </span>
+                              <span className="block text-[11px] text-ink-soft font-mono">
                                 {new Date(t.date).toLocaleDateString(undefined, {
                                   day: "numeric",
                                   month: "short",
@@ -157,38 +240,9 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                                 })}
                                 {t.status === "pending" && <span className="text-gold"> · pending</span>}
                                 {t.status === "rejected" && <span className="text-rust"> · rejected</span>}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {t.receipt_url && (
-                                <button
-                                  type="button"
-                                  onClick={() => setOpenReceiptUrl(t.receipt_url)}
-                                  aria-label="View receipt"
-                                  className="shrink-0 w-6 h-6 rounded-full border border-gold text-gold text-[11px] flex items-center justify-center"
-                                >
-                                  🧾
-                                </button>
-                              )}
-                              {canEdit && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    // Hands the exact row already on screen
-                                    // to EditTransactionSheet, so it can
-                                    // render instantly instead of
-                                    // re-fetching by ID and showing a
-                                    // skeleton over data that hasn't gone
-                                    // anywhere.
-                                    cacheTransactionRow(t)
-                                    router.push(`${pathname}?editTransaction=${t.transaction_id}`, { scroll: false })
-                                  }}
-                                  aria-label={t.status === "rejected" ? "Fix and resend" : "Edit"}
-                                  className="shrink-0 w-6 h-6 rounded-full border border-gold text-gold text-[11px] flex items-center justify-center"
-                                >
-                                  ✎
-                                </button>
-                              )}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-2 shrink-0">
                               <span
                                 className={`font-mono [font-variant-numeric:tabular-nums] text-sm font-semibold ${
                                   isRepayment ? "text-ink" : "text-ink-soft"
@@ -196,12 +250,13 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                               >
                                 ₱{fmt(Math.abs(t.amount))}
                               </span>
-                            </div>
-                          </div>
+                              <span className="text-ink-soft">›</span>
+                            </span>
+                          </span>
                           {t.status === "rejected" && t.rejection_reason && (
-                            <p className="mt-1 text-[11px] text-rust">{t.rejection_reason}</p>
+                            <span className="block mt-1 text-[11px] text-rust">{t.rejection_reason}</span>
                           )}
-                        </div>
+                        </button>
                       )
                     })
                   })()}
@@ -212,7 +267,90 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
         })}
       </div>
 
+      {openTxn && (
+        <LoanTxnSheet
+          t={openTxn}
+          editable={editable}
+          onClose={() => setOpenTxn(null)}
+          onOpenReceipt={setOpenReceiptUrl}
+          onEdit={() => {
+            const t = openTxn
+            setOpenTxn(null)
+            // Hands the exact row already on screen to EditTransactionSheet,
+            // so it renders instantly instead of re-fetching by ID.
+            cacheTransactionRow(t)
+            router.push(`${pathname}?editTransaction=${t.transaction_id}`, { scroll: false })
+          }}
+        />
+      )}
+
       {openReceiptUrl && <ReceiptModal path={openReceiptUrl} onClose={() => setOpenReceiptUrl(null)} />}
     </>
+  )
+}
+
+// One loan entry in full. Only a repayment that's still pending or was
+// rejected can be changed -- rejecting a Loan Release already deletes the
+// loan record, so there's nothing left to fix there. `editable` is off for
+// the admin "view as" preview, which is read-only.
+function LoanTxnSheet({
+  t,
+  editable,
+  onClose,
+  onEdit,
+  onOpenReceipt
+}: {
+  t: LoanTransaction
+  editable: boolean
+  onClose: () => void
+  onEdit: () => void
+  onOpenReceipt: (path: string) => void
+}) {
+  const isRepayment = t.classification === "Loan Repayment"
+  const canEdit = editable && isRepayment && (t.status === "pending" || t.status === "rejected")
+  const statusLabel = t.status === "pending" ? "Waiting for approval" : t.status === "rejected" ? "Rejected" : "Approved"
+
+  return (
+    <Sheet
+      title={TRANSACTION_TYPE_LABELS[t.classification] ?? t.classification}
+      onClose={onClose}
+      footer={
+        canEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="w-full bg-ink text-paper px-6 py-3.5 rounded-full text-base font-bold shadow-lg motion-safe:transition-transform motion-safe:active:scale-[0.97]"
+          >
+            {t.status === "rejected" ? "Fix & resend" : "Edit"}
+          </button>
+        ) : undefined
+      }
+    >
+      <p className="text-center font-mono [font-variant-numeric:tabular-nums] text-[34px] font-bold text-ink pt-1 pb-4">
+        ₱{fmt(Math.abs(t.amount))}
+      </p>
+
+      {t.status === "rejected" && t.rejection_reason && (
+        <div className="rounded-md border border-rust/40 bg-paper px-3.5 py-2.5 mb-4">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-rust font-mono">Why it was rejected</p>
+          <p className="text-sm text-ink mt-0.5">{t.rejection_reason}</p>
+        </div>
+      )}
+
+      <div className="card px-4">
+        <ReviewRow
+          label="Date"
+          value={new Date(t.date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+        />
+        <ReviewRow label="Status" value={statusLabel} />
+        {t.description && <ReviewRow label="Notes" value={t.description} />}
+      </div>
+
+      {t.receipt_url && (
+        <div className="mt-4">
+          <ReceiptThumb path={t.receipt_url} onOpen={() => onOpenReceipt(t.receipt_url!)} />
+        </div>
+      )}
+    </Sheet>
   )
 }

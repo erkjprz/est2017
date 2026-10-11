@@ -7,8 +7,63 @@ import BorrowerHeader from "@/app/components/BorrowerHeader"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import SubmitConfirmation from "@/app/components/SubmitConfirmation"
-import { AmountHero, FieldGroup, ReceiptField, RequiredMark } from "@/app/components/TransactionFormUI"
-import { totalRepayable } from "@/lib/loanMath"
+import ScanToPayCard from "@/app/components/ScanToPayCard"
+import {
+  AmountHero,
+  BankIcon,
+  FieldRow,
+  NoteIcon,
+  ReceiptField,
+  RequiredMark,
+  rowInputClass,
+  rowSelectClass
+} from "@/app/components/TransactionFormUI"
+import { totalRepayable, type InterestType } from "@/lib/loanMath"
+
+type PayableLoan = {
+  principal: number
+  interest_type: InterestType
+  interest_rate: number | null
+  interest_amount: number | null
+  term_months: number | null
+  repayment_frequency: string | null
+}
+
+function LoanIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className="w-5 h-5 text-ink-soft shrink-0">
+      <rect x="3" y="7" width="18" height="12" rx="2" />
+      <path d="M8 7V5.5A1.5 1.5 0 019.5 4h5A1.5 1.5 0 0116 5.5V7" />
+    </svg>
+  )
+}
+
+// What's still owed on a loan once everything already submitted is
+// counted, and the usual payment toward it: one installment (total ÷ term)
+// for a monthly loan, or the whole remainder for a lump sum.
+function loanRemaining(loan: PayableLoan, submittedTotal: number): number {
+  const total = totalRepayable(
+    Number(loan.principal),
+    loan.interest_type,
+    Number(loan.interest_rate || 0),
+    Number(loan.interest_amount || 0)
+  )
+  return Math.max(0, Math.round((total - submittedTotal) * 100) / 100)
+}
+
+function suggestedPayment(loan: PayableLoan, submittedTotal: number): number {
+  const remaining = loanRemaining(loan, submittedTotal)
+  if (loan.repayment_frequency === "monthly" && loan.term_months) {
+    const total = totalRepayable(
+      Number(loan.principal),
+      loan.interest_type,
+      Number(loan.interest_rate || 0),
+      Number(loan.interest_amount || 0)
+    )
+    return Math.min(Math.round((total / loan.term_months) * 100) / 100, remaining)
+  }
+  return remaining
+}
 
 function isValidPositiveNumber(value: string): boolean {
   if (!value.trim()) return false
@@ -29,6 +84,10 @@ export default function BorrowerRepayPage() {
   const [bankId, setBankId] = useState("")
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
+  // Saved default amount/bank (Preferences, or "Remember for next time").
+  const [hasSavedAmount, setHasSavedAmount] = useState(false)
+  const [saveAsDefault, setSaveAsDefault] = useState(false)
+  const [defaultSaveWarning, setDefaultSaveWarning] = useState("")
   const [receipt, setReceipt] = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -68,7 +127,9 @@ export default function BorrowerRepayPage() {
 
       setBanks(bankList ?? [])
 
-      if (prefs?.default_loan_payment_amount != null) setAmount(String(prefs.default_loan_payment_amount))
+      const savedAmount = prefs?.default_loan_payment_amount != null
+      if (savedAmount) setAmount(String(prefs!.default_loan_payment_amount))
+      setHasSavedAmount(savedAmount)
       if (prefs?.default_loan_payment_bank_id) setBankId(prefs.default_loan_payment_bank_id)
 
       const filter = borrowerRow?.borrower_id
@@ -77,7 +138,7 @@ export default function BorrowerRepayPage() {
 
       const { data: loans, error: loansError } = await supabase
         .from("loans")
-        .select("loan_id, name, principal, interest_type, interest_rate, interest_amount, status, start_date")
+        .select("loan_id, name, principal, interest_type, interest_rate, interest_amount, status, start_date, term_months, repayment_frequency")
         .or(filter)
         .eq("status", "active")
         .order("start_date", { ascending: false })
@@ -110,6 +171,16 @@ export default function BorrowerRepayPage() {
           totals[r.loan_id] = (totals[r.loan_id] || 0) + Number(r.amount)
         })
         setLoanRepaidTotals(totals)
+
+        // Only one loan to pay (the usual case): pick it, and with no saved
+        // amount, start from its usual payment instead of ₱0.
+        if (loans!.length === 1) {
+          setSelectedLoanId(loans![0].loan_id)
+          if (!savedAmount) {
+            const suggestion = suggestedPayment(loans![0], totals[loans![0].loan_id] || 0)
+            if (suggestion > 0) setAmount(String(suggestion))
+          }
+        }
       }
 
       setDataLoading(false)
@@ -171,9 +242,8 @@ export default function BorrowerRepayPage() {
       status: "pending"
     })
 
-    setSubmitting(false)
-
     if (error) {
+      setSubmitting(false)
       // The receipt already uploaded successfully above -- if the insert it
       // belongs to failed, clean it up rather than leaving it orphaned in
       // the bucket.
@@ -182,6 +252,17 @@ export default function BorrowerRepayPage() {
       return
     }
 
+    // Same saved defaults Preferences edits -- only after the payment
+    // itself went through, and never blocking it.
+    if (saveAsDefault) {
+      const [{ error: amountError }, { error: bankError }] = await Promise.all([
+        supabase.rpc("set_default_loan_payment_amount", { p_amount: Number(amount) }),
+        supabase.rpc("set_default_loan_payment_bank", { p_bank_id: bankId || null })
+      ])
+      if (amountError || bankError) setDefaultSaveWarning("Couldn't save it as your default — try again next time.")
+    }
+
+    setSubmitting(false)
     setSubmitted(true)
   }
 
@@ -209,7 +290,7 @@ export default function BorrowerRepayPage() {
           <div className="max-w-lg mx-auto px-4 sm:px-5 pt-8 pb-24">
             <SubmitConfirmation
               amount={Number(amount)}
-              label="Loan repayment submitted"
+              label={`Loan payment submitted${defaultSaveWarning ? `. ${defaultSaveWarning}` : ""}`}
               pending
               continueLabel="View Your Loan →"
               onContinue={() => router.push("/borrower")}
@@ -232,100 +313,93 @@ export default function BorrowerRepayPage() {
             ← Your loan
           </button>
 
-          <div className="text-xs tracking-[0.18em] uppercase text-gold font-mono mb-2">Make a Repayment</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-2">
-            You've already sent this money
-          </h1>
+          <div className="text-xs tracking-[0.18em] uppercase text-gold font-mono mb-2">Your loan</div>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-2">Make a payment</h1>
+          <p className="text-[13px] text-ink-soft mb-5">
+            Send it to one of the fund&apos;s banks, then record it here with the receipt.
+          </p>
 
           {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load your loans: {loadError}</p>}
 
           {!loadError && myLoans.length === 0 ? (
             <p className="mt-4 text-sm text-ink-soft text-center py-12 card">
-              You don't have an active loan to repay right now.
+              You don&apos;t have an active loan to pay right now.
             </p>
-          ) : !loadError && (
-            <>
-              <AmountHero value={amount} onChange={setAmount} label="Amount" />
+          ) : (
+            !loadError && (
+              <>
+                {/* Where to send the money, before the form that records it. */}
+                <ScanToPayCard />
 
-              <div className="space-y-4 mt-4">
-                <FieldGroup label="Details">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block mb-2 text-xs uppercase tracking-wide text-ink-soft font-mono">
-                        Which loan
-                        <RequiredMark />
-                      </label>
-                      <select
-                        className="border border-hairline bg-paper text-ink text-sm rounded-sm px-3 py-3 w-full"
-                        value={selectedLoanId}
-                        onChange={(e) => setSelectedLoanId(e.target.value)}
-                      >
-                        <option value="">Select a loan</option>
-                        {myLoans.map((loan) => (
-                          <option key={loan.loan_id} value={loan.loan_id}>
-                            {loan.name || "Loan"} — ₱{fmt(loan.principal)} from {loan.start_date}
-                          </option>
-                        ))}
-                      </select>
-                      {selectedLoanId &&
-                        (() => {
-                          const loan = myLoans.find((l) => l.loan_id === selectedLoanId)
-                          if (!loan) return null
-                          const remaining =
-                            totalRepayable(
-                              Number(loan.principal),
-                              loan.interest_type,
-                              Number(loan.interest_rate || 0),
-                              Number(loan.interest_amount || 0)
-                            ) - (loanRepaidTotals[loan.loan_id] || 0)
-                          return (
-                            <p className="mt-2 text-sm text-ink-soft">
-                              ₱{fmt(Math.max(0, remaining))} left to pay
-                            </p>
-                          )
-                        })()}
-                    </div>
+                <AmountHero value={amount} onChange={setAmount} label="Amount" />
 
-                    <div>
-                      <label className="block mb-2 text-xs uppercase tracking-wide text-ink-soft font-mono">
-                        Bank
-                        <RequiredMark />
-                      </label>
-                      <select
-                        className="border border-hairline bg-paper text-ink text-sm rounded-sm px-3 py-3 w-full"
-                        value={bankId}
-                        onChange={(e) => setBankId(e.target.value)}
-                      >
-                        <option value="">Select a bank</option>
-                        {banks.map((bank) => (
-                          <option key={bank.id} value={bank.id}>
-                            {bank.account_name || bank.bank_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block mb-2 text-xs uppercase tracking-wide text-ink-soft font-mono">
-                        Description
-                      </label>
-                      <input
-                        className="border border-hairline bg-paper text-ink text-sm rounded-sm px-3 py-3 w-full"
-                        placeholder="Additional notes"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                      />
-                      <p className="mt-1 text-[11px] text-ink-soft">Name, month &amp; date are saved automatically.</p>
-                    </div>
-                  </div>
-                </FieldGroup>
-
-                <FieldGroup label="Proof">
+                <div className="space-y-5 mt-4">
                   <div>
-                    <label className="block mb-2 text-xs uppercase tracking-wide text-ink-soft font-mono">
+                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Details</p>
+                    <div className="card divide-y divide-hairline overflow-hidden">
+                      <FieldRow icon={<LoanIcon />}>
+                        <select
+                          className={rowSelectClass}
+                          value={selectedLoanId}
+                          onChange={(e) => {
+                            setSelectedLoanId(e.target.value)
+                            const loan = myLoans.find((l) => l.loan_id === e.target.value)
+                            if (loan && !hasSavedAmount && !amount) {
+                              const suggestion = suggestedPayment(loan, loanRepaidTotals[loan.loan_id] || 0)
+                              if (suggestion > 0) setAmount(String(suggestion))
+                            }
+                          }}
+                        >
+                          <option value="">Which loan?</option>
+                          {myLoans.map((loan) => (
+                            <option key={loan.loan_id} value={loan.loan_id}>
+                              {loan.name || "Loan"} · ₱{fmt(loanRemaining(loan, loanRepaidTotals[loan.loan_id] || 0))} left
+                            </option>
+                          ))}
+                        </select>
+                        <RequiredMark />
+                      </FieldRow>
+                      <FieldRow icon={<BankIcon />}>
+                        <select className={rowSelectClass} value={bankId} onChange={(e) => setBankId(e.target.value)}>
+                          <option value="">Which bank did you send it to?</option>
+                          {banks.map((bank) => (
+                            <option key={bank.id} value={bank.id}>
+                              {bank.account_name || bank.bank_name}
+                            </option>
+                          ))}
+                        </select>
+                        <RequiredMark />
+                      </FieldRow>
+                      <FieldRow icon={<NoteIcon />}>
+                        <div className="flex-1 min-w-0">
+                          <input
+                            className={`${rowInputClass} w-full`}
+                            placeholder="Additional notes"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                          />
+                          <p className="mt-0.5 text-[11px] text-ink-soft">Name, month &amp; date are saved automatically.</p>
+                        </div>
+                      </FieldRow>
+                    </div>
+                    {selectedLoanId &&
+                      (() => {
+                        const loan = myLoans.find((l) => l.loan_id === selectedLoanId)
+                        if (!loan) return null
+                        return (
+                          <p className="mt-2 px-1 text-[12px] text-ink-soft">
+                            ₱{fmt(loanRemaining(loan, loanRepaidTotals[loan.loan_id] || 0))} left to pay, counting payments
+                            still waiting for approval.
+                          </p>
+                        )
+                      })()}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">
                       Receipt
                       <RequiredMark />
-                    </label>
+                    </p>
                     <ReceiptField
                       receipt={receipt}
                       receiptPreview={receiptPreview}
@@ -334,19 +408,55 @@ export default function BorrowerRepayPage() {
                       onFileChange={setReceiptFile}
                     />
                   </div>
-                </FieldGroup>
 
-                {message && <p className="text-sm text-rust">{message}</p>}
+                  {isValidPositiveNumber(amount) && (
+                    <label className="card flex items-start gap-3 px-4 py-3.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={saveAsDefault}
+                        onChange={(e) => setSaveAsDefault(e.target.checked)}
+                        className="peer sr-only"
+                      />
+                      <span
+                        aria-hidden
+                        className={`flex items-center justify-center w-6 h-6 shrink-0 rounded-md border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-sage/50 ${
+                          saveAsDefault ? "bg-sage border-sage text-white" : "border-ink-soft/60"
+                        }`}
+                      >
+                        {saveAsDefault && (
+                          <svg viewBox="0 0 16 16" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                            <path d="M3.5 8.5l3 3 6-7" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[15px] font-semibold text-ink">Remember for next time</span>
+                        <span className="block text-sm text-ink-soft mt-0.5">
+                          Start my next payment at ₱{fmt(Number(amount))}
+                          {bankId
+                            ? ` to ${(() => {
+                                const b = banks.find((x) => x.id === bankId)
+                                return b ? b.account_name || b.bank_name : "this bank"
+                              })()}`
+                            : ""}
+                          . You can change this in Preferences.
+                        </span>
+                      </span>
+                    </label>
+                  )}
 
-                <button
-                  className="w-full bg-ink text-paper px-4 py-3.5 rounded-md text-sm font-bold disabled:opacity-50"
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                >
-                  {submitting ? "Submitting..." : "Submit Repayment"}
-                </button>
-              </div>
-            </>
+                  {message && <p className="text-sm text-rust">{message}</p>}
+
+                  <button
+                    className="w-full bg-ink text-paper px-6 py-3.5 rounded-full text-base font-bold shadow-lg motion-safe:transition-transform motion-safe:active:scale-[0.97] disabled:opacity-50 disabled:shadow-none"
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                  >
+                    {submitting ? "Submitting…" : "Submit payment"}
+                  </button>
+                </div>
+              </>
+            )
           )}
         </div>
       </main>
