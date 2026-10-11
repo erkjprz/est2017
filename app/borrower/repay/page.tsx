@@ -64,6 +64,14 @@ function suggestedPayment(loan: PayableLoan, submittedTotal: number): number {
   return remaining
 }
 
+// Where the amount starts for a loan: the saved default if there is one,
+// otherwise the usual payment -- either way never more than what's left.
+function startingAmount(loan: PayableLoan, submittedTotal: number, savedAmount: number | null): number {
+  if (savedAmount == null) return suggestedPayment(loan, submittedTotal)
+  const remaining = loanRemaining(loan, submittedTotal)
+  return remaining > 0 ? Math.min(savedAmount, remaining) : savedAmount
+}
+
 function isValidPositiveNumber(value: string): boolean {
   if (!value.trim()) return false
   const n = Number(value)
@@ -84,7 +92,9 @@ export default function BorrowerRepayPage() {
   const [amount, setAmount] = useState("")
   const [description, setDescription] = useState("")
   // Saved default amount/bank (Preferences, or "Remember for next time").
-  const [hasSavedAmount, setHasSavedAmount] = useState(false)
+  const [savedAmount, setSavedAmount] = useState<number | null>(null)
+  // Once the borrower types an amount, picking a loan no longer resets it.
+  const [amountEdited, setAmountEdited] = useState(false)
   const [saveAsDefault, setSaveAsDefault] = useState(false)
   const [defaultSaveWarning, setDefaultSaveWarning] = useState("")
   const [receipt, setReceipt] = useState<File | null>(null)
@@ -126,9 +136,9 @@ export default function BorrowerRepayPage() {
 
       setBanks(bankList ?? [])
 
-      const savedAmount = prefs?.default_loan_payment_amount != null
-      if (savedAmount) setAmount(String(prefs!.default_loan_payment_amount))
-      setHasSavedAmount(savedAmount)
+      const saved = prefs?.default_loan_payment_amount != null ? Number(prefs.default_loan_payment_amount) : null
+      if (saved != null) setAmount(String(saved))
+      setSavedAmount(saved)
       if (prefs?.default_loan_payment_bank_id) setBankId(prefs.default_loan_payment_bank_id)
 
       const filter = borrowerRow?.borrower_id
@@ -171,14 +181,12 @@ export default function BorrowerRepayPage() {
         })
         setLoanRepaidTotals(totals)
 
-        // Only one loan to pay (the usual case): pick it, and with no saved
-        // amount, start from its usual payment instead of ₱0.
+        // Only one loan to pay (the usual case): pick it and start from its
+        // saved or usual payment, capped at what's left.
         if (loans!.length === 1) {
           setSelectedLoanId(loans![0].loan_id)
-          if (!savedAmount) {
-            const suggestion = suggestedPayment(loans![0], totals[loans![0].loan_id] || 0)
-            if (suggestion > 0) setAmount(String(suggestion))
-          }
+          const start = startingAmount(loans![0], totals[loans![0].loan_id] || 0, saved)
+          if (start > 0) setAmount(String(start))
         }
       }
 
@@ -327,7 +335,14 @@ export default function BorrowerRepayPage() {
           ) : (
             !loadError && (
               <>
-                <AmountHero value={amount} onChange={setAmount} label="Amount" />
+                <AmountHero
+                  value={amount}
+                  onChange={(v) => {
+                    setAmount(v)
+                    setAmountEdited(true)
+                  }}
+                  label="Amount"
+                />
 
                 <div className="space-y-5 mt-4">
                   <div>
@@ -340,9 +355,9 @@ export default function BorrowerRepayPage() {
                           onChange={(e) => {
                             setSelectedLoanId(e.target.value)
                             const loan = myLoans.find((l) => l.loan_id === e.target.value)
-                            if (loan && !hasSavedAmount && !amount) {
-                              const suggestion = suggestedPayment(loan, loanRepaidTotals[loan.loan_id] || 0)
-                              if (suggestion > 0) setAmount(String(suggestion))
+                            if (loan && !amountEdited) {
+                              const start = startingAmount(loan, loanRepaidTotals[loan.loan_id] || 0, savedAmount)
+                              if (start > 0) setAmount(String(start))
                             }
                           }}
                         >
