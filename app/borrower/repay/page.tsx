@@ -17,16 +17,7 @@ import {
   rowInputClass,
   rowSelectClass
 } from "@/app/components/TransactionFormUI"
-import { totalRepayable, type InterestType } from "@/lib/loanMath"
-
-type PayableLoan = {
-  principal: number
-  interest_type: InterestType
-  interest_rate: number | null
-  interest_amount: number | null
-  term_months: number | null
-  repayment_frequency: string | null
-}
+import { loanRemaining, startingAmount } from "@/lib/loanPayment"
 
 function LoanIcon() {
   return (
@@ -35,41 +26,6 @@ function LoanIcon() {
       <path d="M8 7V5.5A1.5 1.5 0 019.5 4h5A1.5 1.5 0 0116 5.5V7" />
     </svg>
   )
-}
-
-// What's still owed on a loan once everything already submitted is
-// counted, and the usual payment toward it: one installment (total ÷ term)
-// for a monthly loan, or the whole remainder for a lump sum.
-function loanRemaining(loan: PayableLoan, submittedTotal: number): number {
-  const total = totalRepayable(
-    Number(loan.principal),
-    loan.interest_type,
-    Number(loan.interest_rate || 0),
-    Number(loan.interest_amount || 0)
-  )
-  return Math.max(0, Math.round((total - submittedTotal) * 100) / 100)
-}
-
-function suggestedPayment(loan: PayableLoan, submittedTotal: number): number {
-  const remaining = loanRemaining(loan, submittedTotal)
-  if (loan.repayment_frequency === "monthly" && loan.term_months) {
-    const total = totalRepayable(
-      Number(loan.principal),
-      loan.interest_type,
-      Number(loan.interest_rate || 0),
-      Number(loan.interest_amount || 0)
-    )
-    return Math.min(Math.round((total / loan.term_months) * 100) / 100, remaining)
-  }
-  return remaining
-}
-
-// Where the amount starts for a loan: the saved default if there is one,
-// otherwise the usual payment -- either way never more than what's left.
-function startingAmount(loan: PayableLoan, submittedTotal: number, savedAmount: number | null): number {
-  if (savedAmount == null) return suggestedPayment(loan, submittedTotal)
-  const remaining = loanRemaining(loan, submittedTotal)
-  return remaining > 0 ? Math.min(savedAmount, remaining) : savedAmount
 }
 
 function isValidPositiveNumber(value: string): boolean {

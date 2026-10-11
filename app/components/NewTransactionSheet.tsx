@@ -31,6 +31,7 @@ import { getCachedTransactionFormData, loadTransactionFormData } from "@/lib/tra
 import { snapshotInvestmentHold } from "@/lib/snapshotHold"
 import { fetchBankBalances, groupImpacts, txnImpact, type TxnImpact } from "@/lib/bankImpact"
 import { BankImpactPreview } from "@/app/components/BankImpact"
+import { startingAmount, type PayableLoan } from "@/lib/loanPayment"
 
 const MISSING_DUE_DAY_MESSAGE = "Pick the day of the month the payment is due."
 const MISSING_PAYOUT_MESSAGE = "Add bank or e-wallet details, or a QR code, so we know where to send the money."
@@ -144,6 +145,9 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   const [loanPaymentDefault, setLoanPaymentDefault] = useState<number | null>(cached?.loanPaymentDefault ?? null)
   const [loanPaymentBankDefault, setLoanPaymentBankDefault] = useState<string | null>(cached?.loanPaymentBankDefault ?? null)
   const [saveAsDefault, setSaveAsDefault] = useState(false)
+  // Once the amount's been typed, picking a loan (or member) no longer
+  // replaces it.
+  const [amountEdited, setAmountEdited] = useState(false)
 
   // Loan Request is the only type in this reduced set with enough
   // conditional fields to earn its own Details -> Review sub-flow --
@@ -163,13 +167,14 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
     const { data } = await supabase
       .from("loans")
-      .select("loan_id, principal, interest_type, interest_rate, interest_amount, term_months, status, start_date")
+      .select("loan_id, principal, interest_type, interest_rate, interest_amount, term_months, repayment_frequency, status, start_date")
       .or(loanFilter)
       .in("status", ["active", "requested"])
       .order("start_date", { ascending: false })
 
     setMyLoans(data ?? [])
 
+    const totals: Record<string, number> = {}
     const loanIds = (data ?? []).map((l) => l.loan_id)
     if (loanIds.length > 0) {
       const { data: repayments } = await supabase
@@ -179,13 +184,26 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         .eq("classification", "Loan Repayment")
         .in("status", ["pending", "approved"])
 
-      const totals: Record<string, number> = {}
       ;(repayments ?? []).forEach((r) => {
         totals[r.loan_id] = (totals[r.loan_id] || 0) + Number(r.amount)
       })
-      setLoanRepaidTotals(totals)
+    }
+    setLoanRepaidTotals(totals)
+    return { loans: data ?? [], totals }
+  }
+
+  // Loan Payment's starting point, same as the borrower repay page: with
+  // only one active loan, pick it and start from the saved default or one
+  // installment, never more than what's left. Otherwise just the saved
+  // default until a loan is picked.
+  function applyLoanPaymentStart(loans: (PayableLoan & { loan_id: string; status: string })[], totals: Record<string, number>, saved: number | null) {
+    const active = loans.filter((l) => l.status === "active")
+    if (active.length === 1) {
+      setSelectedLoanId(active[0].loan_id)
+      const start = startingAmount(active[0], totals[active[0].loan_id] || 0, saved)
+      setAmount(start > 0 ? String(start) : "")
     } else {
-      setLoanRepaidTotals({})
+      setAmount(saved != null ? String(saved) : "")
     }
   }
 
@@ -392,17 +410,19 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     setSelectedLoanId("")
     setInvestmentId("")
     setSaveAsDefault(false)
+    setAmountEdited(false)
 
     if (newType === "loan_payment" && memberId) {
-      await loadLoansFor(onBehalfOfId || memberId)
+      const id = onBehalfOfId || memberId
+      const [{ loans, totals }, { loanPay, loanPayBank }] = await Promise.all([loadLoansFor(id), loadPreferencesFor(id)])
+      applyLoanPaymentStart(loans, totals, loanPay)
+      if (loanPayBank) setBankId(loanPayBank)
     }
 
-    if ((newType === "contribution" || newType === "loan_payment") && memberId) {
-      const { contrib, contribBank, loanPay, loanPayBank } = await loadPreferencesFor(onBehalfOfId || memberId)
-      if (newType === "contribution" && contrib != null) setAmount(String(contrib))
-      if (newType === "loan_payment" && loanPay != null) setAmount(String(loanPay))
-      if (newType === "contribution" && contribBank) setBankId(contribBank)
-      if (newType === "loan_payment" && loanPayBank) setBankId(loanPayBank)
+    if (newType === "contribution" && memberId) {
+      const { contrib, contribBank } = await loadPreferencesFor(onBehalfOfId || memberId)
+      if (contrib != null) setAmount(String(contrib))
+      if (contribBank) setBankId(contribBank)
     }
   }
 
@@ -412,19 +432,25 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     setSaveAsDefault(false)
 
     if (selectedType === "loan_payment") {
-      await loadLoansFor(id || memberId || "")
+      const target = id || memberId || ""
+      const [{ loans, totals }, { loanPay, loanPayBank }] = await Promise.all([
+        loadLoansFor(target),
+        loadPreferencesFor(target)
+      ])
+      if (!amountEdited) {
+        applyLoanPaymentStart(loans, totals, loanPay)
+      } else {
+        // Keep the typed amount; still pick the member's only loan.
+        const active = loans.filter((l) => l.status === "active")
+        if (active.length === 1) setSelectedLoanId(active[0].loan_id)
+      }
+      if (!bankId && loanPayBank) setBankId(loanPayBank)
     }
 
-    if (selectedType === "contribution" || selectedType === "loan_payment") {
-      const { contrib, contribBank, loanPay, loanPayBank } = await loadPreferencesFor(id || memberId || "")
-      if (!amount) {
-        if (selectedType === "contribution" && contrib != null) setAmount(String(contrib))
-        if (selectedType === "loan_payment" && loanPay != null) setAmount(String(loanPay))
-      }
-      if (!bankId) {
-        if (selectedType === "contribution" && contribBank) setBankId(contribBank)
-        if (selectedType === "loan_payment" && loanPayBank) setBankId(loanPayBank)
-      }
+    if (selectedType === "contribution") {
+      const { contrib, contribBank } = await loadPreferencesFor(id || memberId || "")
+      if (!amount && contrib != null) setAmount(String(contrib))
+      if (!bankId && contribBank) setBankId(contribBank)
     }
   }
 
@@ -917,7 +943,13 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         <p className="py-12 text-center text-sm text-rust">Couldn&apos;t load: {loadError}</p>
       ) : (
         <>
-          <AmountHero value={amount} onChange={setAmount} />
+          <AmountHero
+            value={amount}
+            onChange={(v) => {
+              setAmount(v)
+              setAmountEdited(true)
+            }}
+          />
 
           <div className="space-y-4 mt-4">
             {!isStepped && (
@@ -1175,6 +1207,11 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         onSelect={(loan) => {
           setSelectedLoanId(loan.loan_id)
           setShowLoanPicker(false)
+          if (!amountEdited) {
+            const full = activeLoans.find((l) => l.loan_id === loan.loan_id)
+            const start = full ? startingAmount(full, loanRepaidTotals[loan.loan_id] || 0, loanPaymentDefault) : 0
+            if (start > 0) setAmount(String(start))
+          }
         }}
       />
     )}
