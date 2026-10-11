@@ -11,7 +11,8 @@ import {
   StepTrack,
   ReviewRow,
   ReceiptField,
-  RequiredMark,
+  FieldError,
+  invalidRowClass,
   FieldGroup,
   BankIcon,
   NoteIcon,
@@ -86,6 +87,8 @@ const STATUS_TONE: Record<string, string> = {
 }
 
 // allowZero: interest rate may legitimately be 0.
+const FILL_MESSAGE = "Fill in the highlighted fields."
+
 function isValidPositiveNumber(value: string, allowZero = false): boolean {
   if (!value.trim()) return false
   const n = Number(value)
@@ -153,6 +156,8 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
   const [saving, setSaving] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [message, setMessage] = useState("")
+  // Set when Save/Continue is tapped with something missing -- see `missing`.
+  const [showErrors, setShowErrors] = useState(false)
 
   // Loan Release is the one editable type with enough conditional fields
   // to earn its own Details -> Review sub-flow, matching NewTransactionSheet.
@@ -455,7 +460,33 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
     return ""
   }
 
+  // Every required field still empty. Nothing is marked up front; once
+  // Save/Continue is tapped with gaps, each shows its own message and
+  // clears as soon as it's filled (same as NewTransactionSheet).
+  const missing = {
+    amount: !isValidPositiveNumber(amount),
+    loan: !isLoanRelease && isLoanPayment && !loanId,
+    investment: !isLoanRelease && isInvestmentEntry && !investmentId,
+    bank: !isLoanRelease && needsBank && !bankId,
+    toBank: !isLoanRelease && isBankTransfer && !toBankId,
+    receipt: !isLoanRelease && needsReceipt && !receipt && !existingReceiptUrl,
+    interest: isLoanRelease && !(interestType === "rate" ? interestRate : interestAmount),
+    term: isLoanRelease && !termMonths
+  }
+  const anyMissing = Object.values(missing).some(Boolean)
+  const err = (key: keyof typeof missing, text: string) => (showErrors && missing[key] ? text : undefined)
+
+  function flagMissing() {
+    setShowErrors(true)
+    setMessage(FILL_MESSAGE)
+    setTimeout(() => document.querySelector('[role="alert"]')?.scrollIntoView({ behavior: "smooth", block: "center" }), 0)
+  }
+
   function handleContinueToReview() {
+    if (anyMissing) {
+      flagMissing()
+      return
+    }
     const error = detailsStepError()
     if (error) {
       setMessage(error)
@@ -467,6 +498,10 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
 
   async function handleSave() {
     setMessage("")
+    if (anyMissing) {
+      flagMissing()
+      return
+    }
 
     if (!isValidPositiveNumber(amount)) {
       setMessage("Enter a valid amount greater than zero.")
@@ -776,7 +811,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
       onClose={onClose}
       footer={
         <>
-          {message && <p className="text-sm text-rust mb-3">{message}</p>}
+          {message && !(message === FILL_MESSAGE && !anyMissing) && <p className="text-sm text-rust mb-3">{message}</p>}
           <div className="flex items-center gap-3">
             {/* Same guard as before -- a rejected row is already out of the
                 review queue, so there's nothing left to cancel; Save either
@@ -818,7 +853,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
         </>
       }
     >
-      <AmountHero value={amount} onChange={setAmount} label={isLoanRelease ? "Amount to borrow" : "Amount"} required />
+      <AmountHero value={amount} onChange={setAmount} label={isLoanRelease ? "Amount to borrow" : "Amount"} error={err("amount", "Enter an amount")} />
 
       {/* Same card-of-FieldRows shape as the Details/Loan Terms cards
           below, matching NewTransactionSheet's typeField -- just
@@ -887,7 +922,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                   <button
                     type="button"
                     onClick={() => setShowLoanPicker(true)}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${err("loan", "x") ? invalidRowClass : ""}`}
                   >
                     <LoanRowIcon />
                     <span className="flex-1 min-w-0 text-sm">
@@ -898,8 +933,8 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                       ) : (
                         <span className="text-ink-soft">Select a loan</span>
                       )}
+                      {err("loan", "x") && <FieldError message="Choose which loan" className="mt-1" />}
                     </span>
-                    {!selectedLoan && <RequiredMark />}
                     <span className="text-ink-soft text-xs shrink-0">▾</span>
                   </button>
                 )}
@@ -912,7 +947,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                   <button
                     type="button"
                     onClick={() => setShowInvestmentPicker(true)}
-                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${err("investment", "x") ? invalidRowClass : ""}`}
                   >
                     <InvestmentRowIcon />
                     <span className="flex-1 min-w-0 text-sm">
@@ -921,14 +956,14 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                       ) : (
                         <span className="text-ink-soft">Select an investment</span>
                       )}
+                      {err("investment", "x") && <FieldError message="Choose which investment" className="mt-1" />}
                     </span>
-                    {!selectedInvestmentRow && <RequiredMark />}
                     <span className="text-ink-soft text-xs shrink-0">▾</span>
                   </button>
                 )}
 
                 {needsBank && (
-                  <FieldRow icon={<BankIcon />}>
+                  <FieldRow icon={<BankIcon />} error={err("bank", isBankTransfer ? "Choose the bank it's leaving" : "Choose a bank")}>
                     <select className={rowSelectClass} value={bankId} onChange={(e) => setBankId(e.target.value)}>
                       <option value="">{isBankTransfer ? "From which bank" : "Select a bank"}</option>
                       {banks.map((bank) => (
@@ -937,12 +972,11 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         </option>
                       ))}
                     </select>
-                    {!bankId && <RequiredMark />}
                   </FieldRow>
                 )}
 
                 {isBankTransfer && (
-                  <FieldRow icon={<BankIcon />}>
+                  <FieldRow icon={<BankIcon />} error={err("toBank", "Choose the bank it's going to")}>
                     <select className={rowSelectClass} value={toBankId} onChange={(e) => setToBankId(e.target.value)}>
                       <option value="">To which bank</option>
                       {banks.map((bank) => (
@@ -951,7 +985,6 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         </option>
                       ))}
                     </select>
-                    {!toBankId && <RequiredMark />}
                   </FieldRow>
                 )}
 
@@ -959,7 +992,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                   <div className="flex-1 min-w-0">
                     <input
                       className={`${rowInputClass} w-full`}
-                      placeholder="Additional notes"
+                      placeholder="Additional notes (optional)"
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
                     />
@@ -978,10 +1011,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
 
             {needsReceipt && (
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">
-                  Receipt
-                  <RequiredMark />
-                </p>
+                <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
                 <ReceiptField
                   receipt={receipt}
                   receiptPreview={receiptPreview}
@@ -990,6 +1020,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                   dragActive={dragActive}
                   setDragActive={setDragActive}
                   onFileChange={setReceiptFile}
+                  error={err("receipt", "Attach a receipt")}
                 />
               </div>
             )}
@@ -1007,7 +1038,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                   {/* Toggle + value share one row instead of stacking (toggle, then a
                       second full-width input below it) -- matches NewTransactionSheet's
                       Loan Terms card, the two only ever needing to look the same. */}
-                  <FieldRow icon={<InterestIcon />}>
+                  <FieldRow icon={<InterestIcon />} error={err("interest", interestType === "rate" ? "Choose an interest rate" : "Enter the interest amount")}>
                     {interestType === "rate" && !interestRateCustom ? (
                       // Picker is the default way in, matching
                       // NewTransactionSheet -- "Custom..." in the sheet
@@ -1039,7 +1070,6 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         autoFocus={interestType === "rate" && interestRateCustom}
                       />
                     )}
-                    {!(interestType === "rate" ? interestRate : interestAmount) && <RequiredMark />}
                     <div className="flex border border-hairline rounded-sm overflow-hidden shrink-0">
                       <button
                         type="button"
@@ -1074,7 +1104,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                     )}
                   </FieldRow>
 
-                  <FieldRow icon={<ClockIcon />}>
+                  <FieldRow icon={<ClockIcon />} error={err("term", "Choose a term")}>
                     {!termCustom ? (
                       <button
                         type="button"
@@ -1105,7 +1135,6 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         <span className="text-xs text-ink-soft shrink-0">months</span>
                       </>
                     )}
-                    {!termMonths && <RequiredMark />}
                     <button
                       type="button"
                       onClick={() => setShowTermPicker(true)}
@@ -1186,7 +1215,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                     <div className="flex-1 min-w-0">
                       <input
                         className={`${rowInputClass} w-full`}
-                        placeholder="Additional notes"
+                        placeholder="Additional notes (optional)"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                       />

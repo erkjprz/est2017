@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Sheet } from "@/app/components/Sheet"
-import { DateField, FieldRow, NoteIcon, RequiredMark, rowInputClass } from "@/app/components/TransactionFormUI"
+import { DateField, FieldRow, NoteIcon, rowInputClass } from "@/app/components/TransactionFormUI"
 import {
   distributeInvestmentGain,
   getUndistributedInvestmentGain,
@@ -130,12 +130,12 @@ export function InvestmentDetailsSheet({
     >
       <div className="space-y-4">
         <div>
-          <p className={sectionLabelClass}>
-            Investment name
-            <RequiredMark />
-          </p>
+          <p className={sectionLabelClass}>Investment name</p>
           <div className="card overflow-hidden">
-            <FieldRow icon={<NoteIcon />}>
+            <FieldRow
+              icon={<NoteIcon />}
+              error={message === "Enter an investment name." && !name.trim() ? "Enter a name" : undefined}
+            >
               <input
                 className={rowInputClass}
                 placeholder="e.g. Farmon - Rice (2026-Q3)"
@@ -360,13 +360,16 @@ export function DistributeInvestmentSheet({
         </Callout>
 
         <div>
-          <p className={sectionLabelClass}>
-            Amount
-            {/* Closing with nothing left to settle can be ₱0. */}
-            {!closing && <RequiredMark />}
-          </p>
+          <p className={sectionLabelClass}>Amount</p>
           <div className="card overflow-hidden">
-            <FieldRow icon={<span className="w-[18px] text-center text-ink-soft text-sm shrink-0">₱</span>}>
+            <FieldRow
+              icon={<span className="w-[18px] text-center text-ink-soft text-sm shrink-0">₱</span>}
+              error={
+                (message === "Enter a valid amount." || message === "Enter an amount to distribute.") && !Number(magnitude)
+                  ? "Enter an amount"
+                  : undefined
+              }
+            >
               <input
                 className={`${rowInputClass} font-mono [font-variant-numeric:tabular-nums]`}
                 type="number"
@@ -399,7 +402,7 @@ export function DistributeInvestmentSheet({
               </div>
             </FieldRow>
             <div className="border-t border-hairline">
-              <DateField value={date} onChange={setDate} placeholder="Date" bare required />
+              <DateField value={date} onChange={setDate} placeholder="Date" bare error={message === "Pick a date." && !date ? "Pick a date" : undefined} />
             </div>
             <div className="border-t border-hairline">
               <FieldRow icon={<NoteIcon />}>

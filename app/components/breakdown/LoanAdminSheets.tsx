@@ -10,7 +10,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Sheet } from "@/app/components/Sheet"
 import { LoanTermsCard } from "@/app/components/LoanTermsCard"
-import { FieldRow, BankIcon, NoteIcon, RequiredMark, rowInputClass, rowSelectClass } from "@/app/components/TransactionFormUI"
+import { FieldRow, FieldError, BankIcon, NoteIcon, rowInputClass, rowSelectClass } from "@/app/components/TransactionFormUI"
 import { closeLoanAndDistributeGain, previewLoanClose, type LoanCloseSharePreview } from "@/lib/closeLoan"
 import { approveLoanRelease } from "@/lib/approveLoan"
 import { dateOnly } from "@/lib/currentValue"
@@ -183,7 +183,6 @@ export function EditLoanTermsSheet({
           repaymentFrequency={repaymentFrequency}
           setRepaymentFrequency={setRepaymentFrequency}
           dueDay={dueDay}
-          dueDayRequired={false}
           setDueDay={setDueDay}
         />
 
@@ -222,6 +221,9 @@ export function ReleaseLoanSheet({
   const [receipt, setReceipt] = useState<File | null>(null)
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState("")
+  // Approve stays tappable; tapping it with the bank or proof missing
+  // highlights what's still needed instead.
+  const [showErrors, setShowErrors] = useState(false)
   const [balances, setBalances] = useState<Record<string, number> | null>(null)
 
   useEffect(() => {
@@ -233,7 +235,10 @@ export function ReleaseLoanSheet({
   const chosenBank = banks.find((b) => b.id === bankChoice)
 
   async function approve() {
-    if (!bankChoice || !receipt) return
+    if (!bankChoice || !receipt) {
+      setShowErrors(true)
+      return
+    }
     setApproving(true)
     setError("")
 
@@ -289,7 +294,7 @@ export function ReleaseLoanSheet({
               className="mb-3"
             />
           )}
-          <button className={primaryButtonClass} onClick={approve} disabled={!bankChoice || !receipt || approving}>
+          <button className={primaryButtonClass} onClick={approve} disabled={approving}>
             {approving ? "Releasing..." : `Approve & Release ₱${fmt(adminLoan.principal)}`}
           </button>
           <p className="text-[11px] text-ink-soft text-center mt-2">
@@ -308,12 +313,9 @@ export function ReleaseLoanSheet({
         </div>
 
         <div>
-          <p className={sectionLabelClass}>
-            Disburse from
-            <RequiredMark />
-          </p>
+          <p className={sectionLabelClass}>Disburse from</p>
           <div className="card overflow-hidden">
-            <FieldRow icon={<BankIcon />}>
+            <FieldRow icon={<BankIcon />} error={showErrors && !bankChoice ? "Choose the bank you're sending from" : undefined}>
               <select className={rowSelectClass} value={bankChoice} onChange={(e) => setBankChoice(e.target.value)}>
                 <option value="">Select a bank</option>
                 {banks.map((bank) => (
@@ -327,10 +329,7 @@ export function ReleaseLoanSheet({
         </div>
 
         <div>
-          <p className={sectionLabelClass}>
-            Proof of transfer
-            <RequiredMark />
-          </p>
+          <p className={sectionLabelClass}>Proof of transfer</p>
           {receipt ? (
             <div className="card px-4 py-3 flex items-center gap-3">
               <span className="text-base shrink-0">📎</span>
@@ -347,16 +346,23 @@ export function ReleaseLoanSheet({
               </button>
             </div>
           ) : (
-            <label className="flex items-center justify-center gap-2 border border-dashed border-hairline rounded-md px-3 py-4 cursor-pointer text-center">
-              <span className="text-base shrink-0">📎</span>
-              <span className="text-sm text-ink-soft">Tap to upload a photo or PDF</span>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                className="hidden"
-                onChange={(e) => setReceipt(e.target.files?.[0] ?? null)}
-              />
-            </label>
+            <>
+              <label
+                className={`flex items-center justify-center gap-2 border rounded-md px-3 py-4 cursor-pointer text-center ${
+                  showErrors ? "border-rust" : "border-dashed border-hairline"
+                }`}
+              >
+                <span className="text-base shrink-0">📎</span>
+                <span className="text-sm text-ink-soft">Tap to upload a photo or PDF</span>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  className="hidden"
+                  onChange={(e) => setReceipt(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              {showErrors && <FieldError message="Attach proof of the transfer" className="px-1 mt-1.5" />}
+            </>
           )}
         </div>
       </div>

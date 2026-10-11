@@ -17,7 +17,8 @@ import {
   PersonIcon,
   InterestIcon,
   ClockIcon,
-  RequiredMark,
+  FieldError,
+  invalidRowClass,
   rowSelectClass,
   rowInputClass
 } from "@/app/components/TransactionFormUI"
@@ -141,6 +142,9 @@ export default function AdminPage() {
   // used to push every row after it down the page and fight the sheet
   // above (Search & Fix) for space when both happened to be open at once.
   const [reviewingTxnId, setReviewingTxnId] = useState<string | null>(null)
+  // Approve stays tappable in the review sheet; tapping it with the bank or
+  // proof still missing highlights what's needed (this holds which item).
+  const [approveTriedId, setApproveTriedId] = useState<string | null>(null)
   // Loan Release terms in the review sheet use the same pickers as a loan
   // request; "custom" swaps a row to a typed input, same as LoanTermsCard.
   const [termPicker, setTermPicker] = useState<"rate" | "term" | null>(null)
@@ -1294,13 +1298,12 @@ export default function AdminPage() {
           .filter(Boolean)
           .join(" · ")
 
-        const canApprove =
-          !isDirty &&
-          !(isConfirmedMoney && bulkApproving) &&
-          (!needsAdminProof || !!approvalReceipts[t.transaction_id]) &&
-          uploadingReceiptId !== t.transaction_id &&
-          (!needsWithdrawalBank || !!withdrawalBankSelections[t.transaction_id]) &&
-          (!needsLoanBank || !!loanReleaseBankSelections[t.transaction_id])
+        const missingBank =
+          (needsWithdrawalBank && !withdrawalBankSelections[t.transaction_id]) ||
+          (needsLoanBank && !loanReleaseBankSelections[t.transaction_id])
+        const missingProof = needsAdminProof && !approvalReceipts[t.transaction_id]
+        const showMissing = approveTriedId === t.transaction_id
+        const canApprove = !isDirty && !(isConfirmedMoney && bulkApproving) && uploadingReceiptId !== t.transaction_id
 
         const footer =
           rejectingId === t.transaction_id ? (
@@ -1347,7 +1350,14 @@ export default function AdminPage() {
                 <button
                   type="button"
                   className="flex-1 bg-ink text-paper px-6 py-3.5 rounded-full text-base font-bold shadow-lg motion-safe:transition-transform motion-safe:active:scale-[0.97] disabled:opacity-50 disabled:shadow-none"
-                  onClick={() => (isConfirmedMoney ? approveBulkIds([id]) : approveTransaction(id))}
+                  onClick={() => {
+                    if (missingBank || missingProof) {
+                      setApproveTriedId(id)
+                      return
+                    }
+                    if (isConfirmedMoney) approveBulkIds([id])
+                    else approveTransaction(id)
+                  }}
                   disabled={!canApprove}
                 >
                   {uploadingReceiptId === t.transaction_id
@@ -1367,6 +1377,7 @@ export default function AdminPage() {
             title="Review transaction"
             onClose={() => {
               setReviewingTxnId(null)
+              setApproveTriedId(null)
               setTermPicker(null)
               setCustomRate(false)
               setCustomTerm(false)
@@ -1540,7 +1551,7 @@ export default function AdminPage() {
               <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Details</p>
               <div className="card divide-y divide-hairline overflow-hidden">
                 {needsWithdrawalBank && (
-                  <FieldRow icon={<BankIcon />}>
+                  <FieldRow icon={<BankIcon />} error={showMissing && missingBank ? "Choose the bank you're sending from" : undefined}>
                     <select
                       className={rowSelectClass}
                       value={withdrawalBankSelections[t.transaction_id] || ""}
@@ -1555,12 +1566,11 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
-                    {!withdrawalBankSelections[t.transaction_id] && <RequiredMark />}
                   </FieldRow>
                 )}
 
                 {needsLoanBank && (
-                  <FieldRow icon={<BankIcon />}>
+                  <FieldRow icon={<BankIcon />} error={showMissing && missingBank ? "Choose the bank you're sending from" : undefined}>
                     <select
                       className={rowSelectClass}
                       value={loanReleaseBankSelections[t.transaction_id] || ""}
@@ -1575,16 +1585,19 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
-                    {!loanReleaseBankSelections[t.transaction_id] && <RequiredMark />}
                   </FieldRow>
                 )}
 
-                <label className="flex items-center gap-3 px-4 py-3.5 cursor-pointer">
+                <label
+                  className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer ${
+                    showMissing && missingProof ? invalidRowClass : ""
+                  }`}
+                >
                   <span className="text-base shrink-0">📎</span>
-                  <span className="flex-1 min-w-0 text-sm text-ink-soft truncate">
-                    {approvalReceipts[t.transaction_id]?.name ?? "Proof of transfer"}
+                  <span className="flex-1 min-w-0 text-sm text-ink-soft">
+                    <span className="block truncate">{approvalReceipts[t.transaction_id]?.name ?? "Proof of transfer"}</span>
+                    {showMissing && missingProof && <FieldError message="Attach proof of the transfer" className="mt-1" />}
                   </span>
-                  {!approvalReceipts[t.transaction_id] && <RequiredMark />}
                   <input
                     type="file"
                     accept="image/*,.pdf"
