@@ -1213,18 +1213,27 @@ export default function AdminPage() {
             transaction on record, replacing the old Support tab. */}
         {/* Hidden while rows are selected -- the bulk Approve bar takes the
             same bottom-right spot, and both on screen at once overlapped. */}
+        {/* Pinned to the same max-w-3xl column as the dock (like Navbar's
+            FAB) rather than the viewport edge, so on wide screens (iPad)
+            it sits above the dock's right end instead of the screen corner. */}
         {selectedBulkIds.size === 0 && (
-        <button
-          onClick={() => setShowSearchFix(true)}
-          aria-label="Search & Fix"
-          className="fixed right-4 w-14 h-14 rounded-full bg-ink text-paper flex items-center justify-center shadow-lg z-40"
+        <div
+          className="fixed inset-x-0 z-40 pointer-events-none"
           style={{ bottom: "calc(var(--dock-h) + 0.75rem)" }}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-            <circle cx="10.5" cy="10.5" r="6.5" />
-            <path d="M20 20l-4.8-4.8" />
-          </svg>
-        </button>
+          <div className="max-w-3xl mx-auto px-4 flex justify-end">
+            <button
+              onClick={() => setShowSearchFix(true)}
+              aria-label="Search & Fix"
+              className="pointer-events-auto w-14 h-14 rounded-full bg-ink text-paper flex items-center justify-center shadow-lg"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="M20 20l-4.8-4.8" />
+              </svg>
+            </button>
+          </div>
+        </div>
         )}
       </main>
 
