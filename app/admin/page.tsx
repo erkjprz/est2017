@@ -17,6 +17,7 @@ import {
   PersonIcon,
   InterestIcon,
   ClockIcon,
+  RequiredMark,
   rowSelectClass,
   rowInputClass
 } from "@/app/components/TransactionFormUI"
@@ -1550,6 +1551,7 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    {!withdrawalBankSelections[t.transaction_id] && <RequiredMark />}
                   </FieldRow>
                 )}
 
@@ -1569,6 +1571,7 @@ export default function AdminPage() {
                         </option>
                       ))}
                     </select>
+                    {!loanReleaseBankSelections[t.transaction_id] && <RequiredMark />}
                   </FieldRow>
                 )}
 
@@ -1577,6 +1580,7 @@ export default function AdminPage() {
                   <span className="flex-1 min-w-0 text-sm text-ink-soft truncate">
                     {approvalReceipts[t.transaction_id]?.name ?? "Proof of transfer"}
                   </span>
+                  {!approvalReceipts[t.transaction_id] && <RequiredMark />}
                   <input
                     type="file"
                     accept="image/*,.pdf"

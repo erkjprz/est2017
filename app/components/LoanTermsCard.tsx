@@ -10,6 +10,7 @@ import {
   ClockIcon,
   RepeatIcon,
   CalendarIcon,
+  RequiredMark,
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
@@ -43,7 +44,8 @@ export function LoanTermsCard({
   repaymentFrequency,
   setRepaymentFrequency,
   dueDay,
-  setDueDay
+  setDueDay,
+  dueDayRequired = true
 }: {
   amount: string
   interestType: InterestType
@@ -58,6 +60,9 @@ export function LoanTermsCard({
   setRepaymentFrequency: (v: string) => void
   dueDay: string
   setDueDay: (v: string) => void
+  // Requests need a due day; editing an older loan that never had one
+  // doesn't.
+  dueDayRequired?: boolean
 }) {
   const [showInterestRatePicker, setShowInterestRatePicker] = useState(false)
   const [showTermPicker, setShowTermPicker] = useState(false)
@@ -119,6 +124,7 @@ export function LoanTermsCard({
               autoFocus={interestType === "rate" && interestRateCustom}
             />
           )}
+          {!(interestType === "rate" ? interestRate : interestAmount) && <RequiredMark />}
           <div className="flex border border-hairline rounded-sm overflow-hidden shrink-0">
             <button
               type="button"
@@ -188,6 +194,7 @@ export function LoanTermsCard({
               <span className="text-xs text-ink-soft shrink-0">months</span>
             </>
           )}
+          {!termMonths && <RequiredMark />}
           <button
             type="button"
             onClick={() => setShowTermPicker(true)}
@@ -236,6 +243,7 @@ export function LoanTermsCard({
                 <span className="text-ink-soft">Due day each month, e.g. 15th</span>
               )}
             </button>
+            {dueDayRequired && !dueDay && <RequiredMark />}
             <button
               type="button"
               onClick={() => setShowDueDayPicker(true)}

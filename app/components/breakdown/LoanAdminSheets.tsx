@@ -10,7 +10,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Sheet } from "@/app/components/Sheet"
 import { LoanTermsCard } from "@/app/components/LoanTermsCard"
-import { FieldRow, BankIcon, NoteIcon, rowInputClass, rowSelectClass } from "@/app/components/TransactionFormUI"
+import { FieldRow, BankIcon, NoteIcon, RequiredMark, rowInputClass, rowSelectClass } from "@/app/components/TransactionFormUI"
 import { closeLoanAndDistributeGain, previewLoanClose, type LoanCloseSharePreview } from "@/lib/closeLoan"
 import { approveLoanRelease } from "@/lib/approveLoan"
 import { dateOnly } from "@/lib/currentValue"
@@ -183,6 +183,7 @@ export function EditLoanTermsSheet({
           repaymentFrequency={repaymentFrequency}
           setRepaymentFrequency={setRepaymentFrequency}
           dueDay={dueDay}
+          dueDayRequired={false}
           setDueDay={setDueDay}
         />
 
@@ -307,7 +308,10 @@ export function ReleaseLoanSheet({
         </div>
 
         <div>
-          <p className={sectionLabelClass}>Disburse from</p>
+          <p className={sectionLabelClass}>
+            Disburse from
+            <RequiredMark />
+          </p>
           <div className="card overflow-hidden">
             <FieldRow icon={<BankIcon />}>
               <select className={rowSelectClass} value={bankChoice} onChange={(e) => setBankChoice(e.target.value)}>
@@ -323,7 +327,10 @@ export function ReleaseLoanSheet({
         </div>
 
         <div>
-          <p className={sectionLabelClass}>Proof of transfer</p>
+          <p className={sectionLabelClass}>
+            Proof of transfer
+            <RequiredMark />
+          </p>
           {receipt ? (
             <div className="card px-4 py-3 flex items-center gap-3">
               <span className="text-base shrink-0">📎</span>

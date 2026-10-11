@@ -818,7 +818,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
         </>
       }
     >
-      <AmountHero value={amount} onChange={setAmount} label={isLoanRelease ? "Amount to borrow" : "Amount"} />
+      <AmountHero value={amount} onChange={setAmount} label={isLoanRelease ? "Amount to borrow" : "Amount"} required />
 
       {/* Same card-of-FieldRows shape as the Details/Loan Terms cards
           below, matching NewTransactionSheet's typeField -- just
@@ -899,6 +899,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         <span className="text-ink-soft">Select a loan</span>
                       )}
                     </span>
+                    {!selectedLoan && <RequiredMark />}
                     <span className="text-ink-soft text-xs shrink-0">▾</span>
                   </button>
                 )}
@@ -921,6 +922,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         <span className="text-ink-soft">Select an investment</span>
                       )}
                     </span>
+                    {!selectedInvestmentRow && <RequiredMark />}
                     <span className="text-ink-soft text-xs shrink-0">▾</span>
                   </button>
                 )}
@@ -935,6 +937,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         </option>
                       ))}
                     </select>
+                    {!bankId && <RequiredMark />}
                   </FieldRow>
                 )}
 
@@ -948,6 +951,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         </option>
                       ))}
                     </select>
+                    {!toBankId && <RequiredMark />}
                   </FieldRow>
                 )}
 
@@ -1035,6 +1039,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         autoFocus={interestType === "rate" && interestRateCustom}
                       />
                     )}
+                    {!(interestType === "rate" ? interestRate : interestAmount) && <RequiredMark />}
                     <div className="flex border border-hairline rounded-sm overflow-hidden shrink-0">
                       <button
                         type="button"
@@ -1100,6 +1105,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         <span className="text-xs text-ink-soft shrink-0">months</span>
                       </>
                     )}
+                    {!termMonths && <RequiredMark />}
                     <button
                       type="button"
                       onClick={() => setShowTermPicker(true)}

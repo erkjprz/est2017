@@ -871,6 +871,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
           <span className="text-ink-soft">Which investment</span>
         )}
       </span>
+      {!selectedInvestment && <RequiredMark />}
       <span className="text-ink-soft text-xs shrink-0">▾</span>
     </button>
   )
@@ -949,6 +950,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
               setAmount(v)
               setAmountEdited(true)
             }}
+            required
           />
 
           <div className="space-y-4 mt-4">
@@ -961,7 +963,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
                     {onBehalfOfField}
 
-                    <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare />
+                    <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare required />
 
                     {investmentField}
 
@@ -987,6 +989,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                             <span className="text-ink-soft">Which loan</span>
                           )}
                         </span>
+                        {!selectedLoan && <RequiredMark />}
                         <span className="text-ink-soft text-xs shrink-0">▾</span>
                       </button>
                     )}
@@ -1116,7 +1119,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
                         {onBehalfOfField}
 
-                        <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare />
+                        <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare required />
 
                         <FieldRow icon={<NoteIcon />}>
                           <div className="flex-1 min-w-0">

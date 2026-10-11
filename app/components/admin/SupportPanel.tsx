@@ -26,6 +26,7 @@ import {
   BankIcon,
   NoteIcon,
   StatusIcon,
+  RequiredMark,
   rowSelectClass,
   rowInputClass
 } from "@/app/components/TransactionFormUI"
@@ -567,6 +568,11 @@ function SupportEditForm({
             onChange={(e) => setAmount(stripSignedAmountFormatting(e.target.value))}
             className="text-size-intentional font-mono [font-variant-numeric:tabular-nums] text-4xl font-bold text-ink bg-transparent text-center w-full max-w-[220px] focus:outline-none"
           />
+          {!amount.trim() && (
+            <span className="text-xl self-start">
+              <RequiredMark />
+            </span>
+          )}
         </div>
       </div>
 
