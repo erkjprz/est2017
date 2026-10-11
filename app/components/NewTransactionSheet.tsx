@@ -14,7 +14,8 @@ import {
   StepTrack,
   ReviewRow,
   ReceiptField,
-  RequiredMark,
+  FieldError,
+  invalidRowClass,
   FieldGroup,
   DateField,
   BankIcon,
@@ -35,6 +36,7 @@ import { startingAmount, type PayableLoan } from "@/lib/loanPayment"
 
 const MISSING_DUE_DAY_MESSAGE = "Pick the day of the month the payment is due."
 const MISSING_PAYOUT_MESSAGE = "Add bank or e-wallet details, or a QR code, so we know where to send the money."
+const FILL_MESSAGE = "Fill in the highlighted fields."
 
 // The FAB's quick-entry sheet covers the types every member reaches for
 // constantly (Contribution/Withdrawal/Loan Request/Loan Payment), plus
@@ -127,7 +129,10 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   const [message, setMessage] = useState("")
   // A Withdrawal flags a missing payout by outlining the "Where should we
   // send it?" card itself rather than with a footer message.
-  const [payoutMissing, setPayoutMissing] = useState(false)
+  // Set when Submit/Continue is tapped with something missing; every missing
+  // field then highlights at once (see `missing` below) and clears itself
+  // as it's filled.
+  const [showErrors, setShowErrors] = useState(false)
   const payoutFieldRef = useRef<HTMLDivElement>(null)
 
   const [interestType, setInterestType] = useState<InterestType>("rate")
@@ -314,6 +319,32 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   // on-behalf-of submission has everything a normal approved entry needs
   // and can safely skip the queue instead of landing pending.
   const willAutoApproveOnBehalf = isAdmin && !!onBehalfOfId && (isContribution || isLoanPayment)
+
+  // Every required field that's still empty for this type. Nothing is marked
+  // up front (only "(optional)" fields say anything); once Submit/Continue
+  // is tapped with gaps, each one here shows its own message.
+  const missing = {
+    amount: !isValidPositiveNumber(amount),
+    date: !txnDate,
+    bank: needsBank && !bankId,
+    toBank: isBankTransfer && !toBankId,
+    loan: isLoanPayment && !selectedLoanId,
+    investment: isInvestmentEntry && !investmentId,
+    receipt: needsReceipt && !receipt,
+    payout: needsPayout && !payoutDetails.trim() && !payoutQr,
+    interest: isLoanRequest && !(interestType === "rate" ? interestRate : interestAmount),
+    term: isLoanRequest && !termMonths,
+    dueDay: isLoanRequest && repaymentFrequency === "monthly" && !dueDay
+  }
+  const anyMissing = Object.values(missing).some(Boolean)
+  const err = (key: keyof typeof missing, text: string) => (showErrors && missing[key] ? text : undefined)
+
+  // Highlights everything missing at once and scrolls to the first one.
+  function flagMissing() {
+    setShowErrors(true)
+    setMessage(FILL_MESSAGE)
+    setTimeout(() => document.querySelector('[role="alert"]')?.scrollIntoView({ behavior: "smooth", block: "center" }), 0)
+  }
   // An admin's entry is approved the moment it's saved (fund-level types,
   // their own Investment Return, or an on-behalf Contribution/Loan Payment)
   // -- so, same as approving from the queue, show which bank balance it
@@ -389,7 +420,6 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   // longer applies -- clear it right away instead of on the next Continue.
   function clearMissingPayoutMessage() {
     if (message === MISSING_PAYOUT_MESSAGE) setMessage("")
-    setPayoutMissing(false)
   }
 
   function setPayoutQrFile(file: File | null) {
@@ -414,7 +444,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     setDueDay("")
     setPayoutDetails("")
     setPayoutQrFile(null)
-    setPayoutMissing(false)
+    setShowErrors(false)
     setSelectedLoanId("")
     setInvestmentId("")
     setSaveAsDefault(false)
@@ -488,6 +518,10 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   }
 
   function handleContinueToReview() {
+    if (anyMissing) {
+      flagMissing()
+      return
+    }
     const error = detailsStepError()
     if (error) {
       setMessage(error)
@@ -499,6 +533,10 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
   async function handleSubmit() {
     setMessage("")
+    if (anyMissing) {
+      flagMissing()
+      return
+    }
 
     if (!isValidPositiveNumber(amount)) {
       setMessage("Enter a valid amount greater than zero.")
@@ -533,12 +571,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
       return
     }
     if (needsPayout && !payoutDetails.trim() && !payoutQr) {
-      if (isWithdrawal) {
-        setPayoutMissing(true)
-        payoutFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-      } else {
-        setMessage(MISSING_PAYOUT_MESSAGE)
-      }
+      setMessage(MISSING_PAYOUT_MESSAGE)
       return
     }
     if (isLoanPayment && !selectedLoanId) {
@@ -799,13 +832,10 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   // an admin after approval, using what the member enters here.
   const payoutField = (
     <>
-      <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">
-        Where should we send it?
-        <RequiredMark />
-      </p>
+      <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Where should we send it?</p>
       <div
         ref={payoutFieldRef}
-        className={`card p-4 space-y-3 transition-colors ${payoutMissing ? "!border-rust" : ""}`}
+        className={`card p-4 space-y-3 transition-colors ${err("payout", "x") ? "!border-rust" : ""}`}
       >
         <textarea
           rows={2}
@@ -826,6 +856,9 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
           emptyLabel="Or upload QR code"
         />
       </div>
+      {err("payout", "x") && (
+        <FieldError message="Add your bank or e-wallet details, or a QR code" className="px-1 mt-1.5" />
+      )}
     </>
   )
 
@@ -878,7 +911,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     <button
       type="button"
       onClick={() => setShowInvestmentPicker(true)}
-      className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+      className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${err("investment", "x") ? invalidRowClass : ""}`}
     >
       <InvestmentRowIcon />
       <span className="flex-1 min-w-0 text-sm">
@@ -887,14 +920,14 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         ) : (
           <span className="text-ink-soft">Which investment</span>
         )}
+        {err("investment", "x") && <FieldError message="Choose which investment" className="mt-1" />}
       </span>
-      {!selectedInvestment && <RequiredMark />}
       <span className="text-ink-soft text-xs shrink-0">▾</span>
     </button>
   )
 
   const toBankField = isBankTransfer && (
-    <FieldRow icon={<BankIcon />}>
+    <FieldRow icon={<BankIcon />} error={err("toBank", "Choose the bank it's going to")}>
       <select
         className={rowSelectClass}
         value={toBankId}
@@ -910,7 +943,6 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
           </option>
         ))}
       </select>
-      {!toBankId && <RequiredMark />}
     </FieldRow>
   )
 
@@ -929,7 +961,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
       onClose={onClose}
       footer={
         <>
-          {message && <p className="text-sm text-rust mb-3">{message}</p>}
+          {message && !(message === FILL_MESSAGE && !anyMissing) && <p className="text-sm text-rust mb-3">{message}</p>}
           {entryImpact && (
             <BankImpactPreview {...entryImpact} balances={bankBalances} title="Bank balance after saving" className="mb-3" />
           )}
@@ -967,7 +999,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
               setAmount(v)
               setAmountEdited(true)
             }}
-            required
+            error={err("amount", "Enter an amount")}
           />
 
           <div className="space-y-4 mt-4">
@@ -980,7 +1012,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
                     {onBehalfOfField}
 
-                    <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare required />
+                    <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare error={err("date", "Pick a date")} />
 
                     {investmentField}
 
@@ -994,7 +1026,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                       <button
                         type="button"
                         onClick={() => setShowLoanPicker(true)}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+                        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${err("loan", "x") ? invalidRowClass : ""}`}
                       >
                         <LoanRowIcon />
                         <span className="flex-1 min-w-0 text-sm">
@@ -1005,14 +1037,17 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                           ) : (
                             <span className="text-ink-soft">Which loan</span>
                           )}
+                          {err("loan", "x") && <FieldError message="Choose which loan" className="mt-1" />}
                         </span>
-                        {!selectedLoan && <RequiredMark />}
                         <span className="text-ink-soft text-xs shrink-0">▾</span>
                       </button>
                     )}
 
                     {needsBank && (
-                      <FieldRow icon={<BankIcon />}>
+                      <FieldRow
+                        icon={<BankIcon />}
+                        error={err("bank", isBankTransfer ? "Choose the bank it's leaving" : "Choose a bank")}
+                      >
                         <select
                           className={rowSelectClass}
                           value={bankId}
@@ -1028,9 +1063,6 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                             </option>
                           ))}
                         </select>
-                        {/* Required to submit (see handleSubmit) -- marked the
-                            same way as the Receipt label while still empty. */}
-                        {!bankId && <RequiredMark />}
                       </FieldRow>
                     )}
 
@@ -1040,7 +1072,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                       <div className="flex-1 min-w-0">
                         <input
                           className={`${rowInputClass} w-full`}
-                          placeholder="Additional notes"
+                          placeholder="Additional notes (optional)"
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
                         />
@@ -1105,16 +1137,14 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
                 {needsReceipt && (
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">
-                      Receipt
-                      <RequiredMark />
-                    </p>
+                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
                     <ReceiptField
                       receipt={receipt}
                       receiptPreview={receiptPreview}
                       dragActive={dragActive}
                       setDragActive={setDragActive}
                       onFileChange={setReceiptFile}
+                      error={err("receipt", "Attach a receipt")}
                     />
                   </div>
                 )}
@@ -1136,13 +1166,13 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
                         {onBehalfOfField}
 
-                        <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare required />
+                        <DateField value={txnDate} onChange={setTxnDate} placeholder="Date" bare error={err("date", "Pick a date")} />
 
                         <FieldRow icon={<NoteIcon />}>
                           <div className="flex-1 min-w-0">
                             <input
                               className={`${rowInputClass} w-full`}
-                              placeholder="Additional notes"
+                              placeholder="Additional notes (optional)"
                               value={description}
                               onChange={(e) => setDescription(e.target.value)}
                             />
@@ -1156,6 +1186,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
                     <div className="mt-4">
                       <LoanTermsCard
+                        showErrors={showErrors}
                         amount={amount}
                         interestType={interestType}
                         setInterestType={setInterestType}

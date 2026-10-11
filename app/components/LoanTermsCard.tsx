@@ -10,7 +10,6 @@ import {
   ClockIcon,
   RepeatIcon,
   CalendarIcon,
-  RequiredMark,
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
@@ -45,7 +44,7 @@ export function LoanTermsCard({
   setRepaymentFrequency,
   dueDay,
   setDueDay,
-  dueDayRequired = true
+  showErrors = false
 }: {
   amount: string
   interestType: InterestType
@@ -60,10 +59,18 @@ export function LoanTermsCard({
   setRepaymentFrequency: (v: string) => void
   dueDay: string
   setDueDay: (v: string) => void
-  // Requests need a due day; editing an older loan that never had one
-  // doesn't.
-  dueDayRequired?: boolean
+  // Set once Submit/Continue was tapped with something missing -- each
+  // empty term then shows what it needs (see FieldError).
+  showErrors?: boolean
 }) {
+  const interestError =
+    showErrors && !(interestType === "rate" ? interestRate : interestAmount)
+      ? interestType === "rate"
+        ? "Choose an interest rate"
+        : "Enter the interest amount"
+      : undefined
+  const termError = showErrors && !termMonths ? "Choose a term" : undefined
+  const dueDayError = showErrors && repaymentFrequency === "monthly" && !dueDay ? "Choose a due day" : undefined
   const [showInterestRatePicker, setShowInterestRatePicker] = useState(false)
   const [showTermPicker, setShowTermPicker] = useState(false)
   const [showDueDayPicker, setShowDueDayPicker] = useState(false)
@@ -93,7 +100,7 @@ export function LoanTermsCard({
             second full-width input below it) -- the toggle only ever needs
             two glyphs' worth of width once it's not also carrying "Rate (%)"/
             "Fixed amount (₱)" as button text. */}
-        <FieldRow icon={<InterestIcon />}>
+        <FieldRow icon={<InterestIcon />} error={interestError}>
           {interestType === "rate" && !interestRateCustom ? (
             // Picker is the default way in -- tapping the
             // value area itself opens the same sheet the
@@ -124,7 +131,6 @@ export function LoanTermsCard({
               autoFocus={interestType === "rate" && interestRateCustom}
             />
           )}
-          {!(interestType === "rate" ? interestRate : interestAmount) && <RequiredMark />}
           <div className="flex border border-hairline rounded-sm overflow-hidden shrink-0">
             <button
               type="button"
@@ -163,7 +169,7 @@ export function LoanTermsCard({
           )}
         </FieldRow>
 
-        <FieldRow icon={<ClockIcon />}>
+        <FieldRow icon={<ClockIcon />} error={termError}>
           {!termCustom ? (
             <button
               type="button"
@@ -194,7 +200,6 @@ export function LoanTermsCard({
               <span className="text-xs text-ink-soft shrink-0">months</span>
             </>
           )}
-          {!termMonths && <RequiredMark />}
           <button
             type="button"
             onClick={() => setShowTermPicker(true)}
@@ -231,7 +236,7 @@ export function LoanTermsCard({
         {/* Only monthly loans have a recurring due date -- a lump sum is
             simply due at the end of the term. */}
         {repaymentFrequency === "monthly" && (
-          <FieldRow icon={<CalendarIcon />}>
+          <FieldRow icon={<CalendarIcon />} error={dueDayError}>
             <button
               type="button"
               onClick={() => setShowDueDayPicker(true)}
@@ -243,7 +248,6 @@ export function LoanTermsCard({
                 <span className="text-ink-soft">Due day each month, e.g. 15th</span>
               )}
             </button>
-            {dueDayRequired && !dueDay && <RequiredMark />}
             <button
               type="button"
               onClick={() => setShowDueDayPicker(true)}

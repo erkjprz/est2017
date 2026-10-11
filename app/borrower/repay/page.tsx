@@ -13,7 +13,6 @@ import {
   FieldRow,
   NoteIcon,
   ReceiptField,
-  RequiredMark,
   rowInputClass,
   rowSelectClass
 } from "@/app/components/TransactionFormUI"
@@ -27,6 +26,8 @@ function LoanIcon() {
     </svg>
   )
 }
+
+const FILL_MESSAGE = "Fill in the highlighted fields."
 
 function isValidPositiveNumber(value: string): boolean {
   if (!value.trim()) return false
@@ -58,6 +59,8 @@ export default function BorrowerRepayPage() {
   const [dragActive, setDragActive] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState("")
+  // Set when Submit is tapped with something missing -- see `missing`.
+  const [showErrors, setShowErrors] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [loadError, setLoadError] = useState("")
 
@@ -157,8 +160,26 @@ export default function BorrowerRepayPage() {
     setReceiptPreview(file ? URL.createObjectURL(file) : null)
   }
 
+  // Nothing is marked up front; once Submit is tapped with gaps, every
+  // missing field shows its own message and clears as soon as it's filled.
+  const missing = {
+    loan: !selectedLoanId,
+    amount: !isValidPositiveNumber(amount),
+    bank: !bankId,
+    receipt: !receipt
+  }
+  const anyMissing = Object.values(missing).some(Boolean)
+  const err = (key: keyof typeof missing, text: string) => (showErrors && missing[key] ? text : undefined)
+
   async function handleSubmit() {
     setMessage("")
+
+    if (anyMissing) {
+      setShowErrors(true)
+      setMessage(FILL_MESSAGE)
+      setTimeout(() => document.querySelector('[role="alert"]')?.scrollIntoView({ behavior: "smooth", block: "center" }), 0)
+      return
+    }
 
     if (!selectedLoanId) {
       setMessage("Select which loan you're paying.")
@@ -298,14 +319,14 @@ export default function BorrowerRepayPage() {
                     setAmountEdited(true)
                   }}
                   label="Amount"
-                  required
+                  error={err("amount", "Enter an amount")}
                 />
 
                 <div className="space-y-5 mt-4">
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Details</p>
                     <div className="card divide-y divide-hairline overflow-hidden">
-                      <FieldRow icon={<LoanIcon />}>
+                      <FieldRow icon={<LoanIcon />} error={err("loan", "Choose which loan")}>
                         <select
                           className={rowSelectClass}
                           value={selectedLoanId}
@@ -325,9 +346,8 @@ export default function BorrowerRepayPage() {
                             </option>
                           ))}
                         </select>
-                        {!selectedLoanId && <RequiredMark />}
                       </FieldRow>
-                      <FieldRow icon={<BankIcon />}>
+                      <FieldRow icon={<BankIcon />} error={err("bank", "Choose the bank you sent it to")}>
                         <select className={rowSelectClass} value={bankId} onChange={(e) => setBankId(e.target.value)}>
                           <option value="">Which bank did you send it to?</option>
                           {banks.map((bank) => (
@@ -336,13 +356,12 @@ export default function BorrowerRepayPage() {
                             </option>
                           ))}
                         </select>
-                        {!bankId && <RequiredMark />}
                       </FieldRow>
                       <FieldRow icon={<NoteIcon />}>
                         <div className="flex-1 min-w-0">
                           <input
                             className={`${rowInputClass} w-full`}
-                            placeholder="Additional notes"
+                            placeholder="Additional notes (optional)"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                           />
@@ -364,16 +383,14 @@ export default function BorrowerRepayPage() {
                   </div>
 
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">
-                      Receipt
-                      <RequiredMark />
-                    </p>
+                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
                     <ReceiptField
                       receipt={receipt}
                       receiptPreview={receiptPreview}
                       dragActive={dragActive}
                       setDragActive={setDragActive}
                       onFileChange={setReceiptFile}
+                      error={err("receipt", "Attach a receipt")}
                     />
                   </div>
 
@@ -413,7 +430,7 @@ export default function BorrowerRepayPage() {
                     </label>
                   )}
 
-                  {message && <p className="text-sm text-rust">{message}</p>}
+                  {message && !(message === FILL_MESSAGE && !anyMissing) && <p className="text-sm text-rust">{message}</p>}
 
                   <button
                     className="w-full bg-ink text-paper px-6 py-3.5 rounded-full text-base font-bold shadow-lg motion-safe:transition-transform motion-safe:active:scale-[0.97] disabled:opacity-50 disabled:shadow-none"

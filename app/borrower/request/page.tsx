@@ -10,7 +10,7 @@ import SubmitConfirmation from "@/app/components/SubmitConfirmation"
 import { LoanTermsCard } from "@/app/components/LoanTermsCard"
 import {
   AmountHero,
-  RequiredMark,
+  FieldError,
   FieldGroup,
   FieldRow,
   NoteIcon,
@@ -24,6 +24,8 @@ import { ordinalDay } from "@/lib/loanFormat"
 
 const MISSING_DUE_DAY_MESSAGE = "Pick the day of the month your payment is due."
 const MISSING_PAYOUT_MESSAGE = "Add your bank or e-wallet details, or a QR code, so we know where to send the money."
+
+const FILL_MESSAGE = "Fill in the highlighted fields."
 
 function isValidPositiveNumber(value: string, allowZero = false): boolean {
   if (!value.trim()) return false
@@ -54,6 +56,8 @@ export default function BorrowerRequestLoanPage() {
   const [qrDragActive, setQrDragActive] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState("")
+  // Set when Continue is tapped with something missing -- see `missing`.
+  const [showErrors, setShowErrors] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   // Same Details -> Review sub-flow a member's Loan Request uses in
   // NewTransactionSheet.
@@ -114,7 +118,25 @@ export default function BorrowerRequestLoanPage() {
     return ""
   }
 
+  // Nothing is marked up front; once Continue is tapped with gaps, every
+  // missing field shows its own message and clears as soon as it's filled.
+  const missing = {
+    amount: !isValidPositiveNumber(amount),
+    terms:
+      !(interestType === "rate" ? interestRate : interestAmount) ||
+      !termMonths ||
+      (repaymentFrequency === "monthly" && !dueDay),
+    payout: !payoutDetails.trim() && !payoutQr
+  }
+  const anyMissing = Object.values(missing).some(Boolean)
+
   function handleContinueToReview() {
+    if (anyMissing) {
+      setShowErrors(true)
+      setMessage(FILL_MESSAGE)
+      setTimeout(() => document.querySelector('[role="alert"]')?.scrollIntoView({ behavior: "smooth", block: "center" }), 0)
+      return
+    }
     const error = detailsError()
     if (error) {
       setMessage(error)
@@ -235,7 +257,7 @@ export default function BorrowerRequestLoanPage() {
           <div className="text-xs tracking-[0.18em] uppercase text-gold font-mono mb-2">Request a Loan</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-2">How much do you need?</h1>
 
-          <AmountHero value={amount} onChange={setAmount} required />
+          <AmountHero value={amount} onChange={setAmount} error={showErrors && missing.amount ? "Enter an amount" : undefined} />
 
           <div className="space-y-4 mt-4">
             <StepTrack step={formStep} labels={["Details", "Review"]} />
@@ -249,7 +271,7 @@ export default function BorrowerRequestLoanPage() {
                       <div className="flex-1 min-w-0">
                         <input
                           className={`${rowInputClass} w-full`}
-                          placeholder="What's it for?"
+                          placeholder="What's it for? (optional)"
                           value={description}
                           onChange={(e) => setDescription(e.target.value)}
                         />
@@ -260,6 +282,7 @@ export default function BorrowerRequestLoanPage() {
                 </div>
 
                 <LoanTermsCard
+                  showErrors={showErrors}
                   amount={amount}
                   interestType={interestType}
                   setInterestType={setInterestType}
@@ -281,9 +304,8 @@ export default function BorrowerRequestLoanPage() {
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">
                     Where should we send it?
-                    <RequiredMark />
                   </p>
-                  <div className="card p-4 space-y-3">
+                  <div className={`card p-4 space-y-3 ${showErrors && missing.payout ? "!border-rust" : ""}`}>
                     <textarea
                       rows={2}
                       className="block w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-soft resize-none"
@@ -303,6 +325,9 @@ export default function BorrowerRequestLoanPage() {
                       emptyLabel="Or upload QR code"
                     />
                   </div>
+                  {showErrors && missing.payout && (
+                    <FieldError message="Add your bank or e-wallet details, or a QR code" className="px-1 mt-1.5" />
+                  )}
                 </div>
               </>
             )}
@@ -329,7 +354,7 @@ export default function BorrowerRequestLoanPage() {
               </FieldGroup>
             )}
 
-            {message && <p className="text-sm text-rust">{message}</p>}
+            {message && !(message === FILL_MESSAGE && !anyMissing) && <p className="text-sm text-rust">{message}</p>}
 
             <div className="flex items-center gap-3">
               {formStep === 2 && (

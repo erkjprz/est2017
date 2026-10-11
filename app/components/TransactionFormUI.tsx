@@ -66,12 +66,12 @@ export function AmountHero({
   onChange,
   label,
   helper,
-  required
+  error
 }: {
   value: string
   onChange: (v: string) => void
-  // Shows the required * beside the number while it's still empty.
-  required?: boolean
+  // Shown under the number once Submit has been tapped with it missing.
+  error?: string
   // Both optional and only rendered when given -- the number itself is
   // already the biggest thing on screen, so a caller with no real label/
   // helper to add (see NewTransactionSheet) isn't stuck reserving a blank
@@ -92,12 +92,8 @@ export function AmountHero({
           onChange={(e) => onChange(stripAmountFormatting(e.target.value))}
           className="text-size-intentional font-mono [font-variant-numeric:tabular-nums] text-4xl font-bold text-ink bg-transparent text-center w-full max-w-[220px] focus:outline-none placeholder:text-ink-soft/30"
         />
-        {required && !value && (
-          <span className="text-xl self-start">
-            <RequiredMark />
-          </span>
-        )}
       </div>
+      {error && <FieldError message={error} className="!text-sm mt-2" />}
       {helper && <p className="text-sm text-ink-soft mt-2.5 max-w-xs mx-auto">{helper}</p>}
     </div>
   )
@@ -237,7 +233,8 @@ export function ReceiptField({
   dragActive,
   setDragActive,
   onFileChange,
-  emptyLabel = "Tap to upload a photo"
+  emptyLabel = "Tap to upload a photo",
+  error
 }: {
   receipt: File | null
   receiptPreview: string | null
@@ -247,6 +244,8 @@ export function ReceiptField({
   setDragActive: (v: boolean) => void
   onFileChange: (file: File | null) => void
   emptyLabel?: string
+  // Shown (with a red outline) once Submit has been tapped with no file.
+  error?: string
 }) {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -304,26 +303,29 @@ export function ReceiptField({
   }
 
   return (
-    <label
-      onDragOver={(e) => {
-        e.preventDefault()
-        setDragActive(true)
-      }}
-      onDragLeave={() => setDragActive(false)}
-      onDrop={handleDrop}
-      className={`flex items-center justify-center gap-2 border border-dashed rounded-sm px-3 py-3 cursor-pointer text-center transition-colors ${
-        dragActive ? "border-gold bg-gold/5" : "border-hairline"
-      }`}
-    >
-      <span className="text-base shrink-0">📎</span>
-      <span className="text-sm text-ink-soft">{emptyLabel}</span>
-      <input
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
-      />
-    </label>
+    <>
+      <label
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragActive(true)
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleDrop}
+        className={`flex items-center justify-center gap-2 border rounded-sm px-3 py-3 cursor-pointer text-center transition-colors ${
+          dragActive ? "border-dashed border-gold bg-gold/5" : error ? "border-rust" : "border-dashed border-hairline"
+        }`}
+      >
+        <span className="text-base shrink-0">📎</span>
+        <span className="text-sm text-ink-soft">{emptyLabel}</span>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+        />
+      </label>
+      {error && <FieldError message={error} className="px-1 mt-1.5" />}
+    </>
   )
 }
 
@@ -341,14 +343,17 @@ export function FieldGroup({ label, children }: { label?: string; children: Reac
   )
 }
 
-// Marks a field label as required -- e.g. `Bank <RequiredMark />` -- in
-// place of the old sticky-footer "Bank required" chips. Sits right next
-// to the field it applies to instead of needing a legend read separately.
-export function RequiredMark() {
+// Required fields aren't marked up front -- nearly every field is required,
+// so only the optional ones say so ("Additional notes (optional)"). Instead,
+// tapping Submit with something missing highlights every missing field at
+// once: a red edge on its row (invalidRowClass) and a short message under
+// it (FieldError). Both clear on their own as soon as the field is filled.
+export const invalidRowClass = "shadow-[inset_3px_0_0_var(--color-rust)]"
+
+export function FieldError({ message, className = "" }: { message: string; className?: string }) {
   return (
-    <span className="text-rust" aria-hidden="true">
-      {" "}
-      *
+    <span role="alert" className={`block text-[12px] text-rust ${className}`}>
+      {message}
     </span>
   )
 }
@@ -457,11 +462,22 @@ export function RepeatIcon() {
 // One row of a compact Details/Loan Terms card -- icon + inline content,
 // divided from its siblings by the card's own divide-y rather than its own
 // border.
-export function FieldRow({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+export function FieldRow({ icon, children, error }: { icon: React.ReactNode; children: React.ReactNode; error?: string }) {
+  if (!error) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        {icon}
+        {children}
+      </div>
+    )
+  }
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5">
+    <div className={`flex items-center gap-3 px-4 py-3.5 ${invalidRowClass}`}>
       {icon}
-      {children}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-3">{children}</div>
+        <FieldError message={error} className="mt-1" />
+      </div>
     </div>
   )
 }
@@ -493,12 +509,12 @@ export function DateField({
   onChange,
   placeholder,
   bare,
-  required
+  error
 }: {
   value: string
   onChange: (v: string) => void
   placeholder: string
-  required?: boolean
+  error?: string
   // Icon-row layout (e.g. NewTransactionSheet's Details card) -- no border/
   // background of its own, sized by its own row padding instead of a fixed
   // height, and matches the plain text weight of its row siblings instead
@@ -517,7 +533,7 @@ export function DateField({
       <div
         className={
           bare
-            ? "pointer-events-none flex items-center gap-3 px-4 py-3.5 text-sm text-ink"
+            ? `pointer-events-none flex items-center gap-3 px-4 py-3.5 text-sm text-ink ${error ? invalidRowClass : ""}`
             : `pointer-events-none h-full flex items-center gap-2 border rounded-md px-3 text-sm font-mono ${
                 value ? "border-gold text-ink" : "border-hairline text-ink-soft"
               }`
@@ -533,8 +549,10 @@ export function DateField({
           <rect x="3.5" y="5" width="17" height="16" rx="2" />
           <path d="M8 3v4M16 3v4M3.5 10h17" strokeLinecap="round" />
         </svg>
-        <span className="truncate flex-1 min-w-0">{value ? formatFull(value) : placeholder}</span>
-        {required && !value && <RequiredMark />}
+        <div className="flex-1 min-w-0">
+          <span className="block truncate">{value ? formatFull(value) : placeholder}</span>
+          {error && <FieldError message={error} className="mt-1" />}
+        </div>
       </div>
     </div>
   )
