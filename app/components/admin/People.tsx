@@ -348,7 +348,16 @@ export function EditPersonSheet({
           </select>
         </FieldRow>
         <FieldRow icon={<StatusIcon />}>
-          <select className={rowSelectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+          <select
+            className={rowSelectClass}
+            value={status}
+            onChange={(e) => {
+              // Bringing someone back from inactive restores gain sharing,
+              // same as the Reactivate button (it can still be unticked).
+              if (status === "inactive" && e.target.value !== "inactive" && role !== "borrower") setGainSharing(true)
+              setStatus(e.target.value)
+            }}
+          >
             <option value="approved">Approved</option>
             <option value="pending">Pending</option>
             <option value="inactive">Inactive</option>

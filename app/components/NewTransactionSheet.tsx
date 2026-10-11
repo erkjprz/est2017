@@ -154,7 +154,13 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   // Contribution/Withdrawal/Loan Payment stay a single flowing view.
   const [formStep, setFormStep] = useState<1 | 2>(1)
 
-  async function loadLoansFor(id: string) {
+  // Each type/member switch bumps this; a load that finishes after a newer
+  // one started (an admin flipping "on behalf of" quickly) is dropped, so
+  // one member's loan can't end up selected under another member.
+  const loadSeqRef = useRef(0)
+  const isStale = (seq: number) => seq !== loadSeqRef.current
+
+  async function loadLoansFor(id: string, seq: number) {
     const { data: borrowerRow } = await supabase
       .from("borrowers")
       .select("borrower_id")
@@ -172,7 +178,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
       .in("status", ["active", "requested"])
       .order("start_date", { ascending: false })
 
-    setMyLoans(data ?? [])
+    if (!isStale(seq)) setMyLoans(data ?? [])
 
     const totals: Record<string, number> = {}
     const loanIds = (data ?? []).map((l) => l.loan_id)
@@ -188,7 +194,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         totals[r.loan_id] = (totals[r.loan_id] || 0) + Number(r.amount)
       })
     }
-    setLoanRepaidTotals(totals)
+    if (!isStale(seq)) setLoanRepaidTotals(totals)
     return { loans: data ?? [], totals }
   }
 
@@ -207,7 +213,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     }
   }
 
-  async function loadPreferencesFor(id: string) {
+  async function loadPreferencesFor(id: string, seq: number) {
     const { data } = await supabase
       .from("members")
       .select(
@@ -220,10 +226,12 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     const contribBank = data?.default_contribution_bank_id ?? null
     const loanPay = data?.default_loan_payment_amount != null ? Number(data.default_loan_payment_amount) : null
     const loanPayBank = data?.default_loan_payment_bank_id ?? null
-    setContributionDefault(contrib)
-    setContributionBankDefault(contribBank)
-    setLoanPaymentDefault(loanPay)
-    setLoanPaymentBankDefault(loanPayBank)
+    if (!isStale(seq)) {
+      setContributionDefault(contrib)
+      setContributionBankDefault(contribBank)
+      setLoanPaymentDefault(loanPay)
+      setLoanPaymentBankDefault(loanPayBank)
+    }
     return { contrib, contribBank, loanPay, loanPayBank }
   }
 
@@ -411,16 +419,22 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     setInvestmentId("")
     setSaveAsDefault(false)
     setAmountEdited(false)
+    const seq = ++loadSeqRef.current
 
     if (newType === "loan_payment" && memberId) {
       const id = onBehalfOfId || memberId
-      const [{ loans, totals }, { loanPay, loanPayBank }] = await Promise.all([loadLoansFor(id), loadPreferencesFor(id)])
+      const [{ loans, totals }, { loanPay, loanPayBank }] = await Promise.all([
+        loadLoansFor(id, seq),
+        loadPreferencesFor(id, seq)
+      ])
+      if (isStale(seq)) return
       applyLoanPaymentStart(loans, totals, loanPay)
       if (loanPayBank) setBankId(loanPayBank)
     }
 
     if (newType === "contribution" && memberId) {
-      const { contrib, contribBank } = await loadPreferencesFor(onBehalfOfId || memberId)
+      const { contrib, contribBank } = await loadPreferencesFor(onBehalfOfId || memberId, seq)
+      if (isStale(seq)) return
       if (contrib != null) setAmount(String(contrib))
       if (contribBank) setBankId(contribBank)
     }
@@ -430,13 +444,15 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     setOnBehalfOfId(id)
     setSelectedLoanId("")
     setSaveAsDefault(false)
+    const seq = ++loadSeqRef.current
 
     if (selectedType === "loan_payment") {
       const target = id || memberId || ""
       const [{ loans, totals }, { loanPay, loanPayBank }] = await Promise.all([
-        loadLoansFor(target),
-        loadPreferencesFor(target)
+        loadLoansFor(target, seq),
+        loadPreferencesFor(target, seq)
       ])
+      if (isStale(seq)) return
       if (!amountEdited) {
         applyLoanPaymentStart(loans, totals, loanPay)
       } else {
@@ -448,7 +464,8 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     }
 
     if (selectedType === "contribution") {
-      const { contrib, contribBank } = await loadPreferencesFor(id || memberId || "")
+      const { contrib, contribBank } = await loadPreferencesFor(id || memberId || "", seq)
+      if (isStale(seq)) return
       if (!amount && contrib != null) setAmount(String(contrib))
       if (!bankId && contribBank) setBankId(contribBank)
     }
