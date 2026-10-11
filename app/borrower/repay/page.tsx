@@ -298,6 +298,7 @@ export default function BorrowerRepayPage() {
                     setAmountEdited(true)
                   }}
                   label="Amount"
+                  required
                 />
 
                 <div className="space-y-5 mt-4">
@@ -324,7 +325,7 @@ export default function BorrowerRepayPage() {
                             </option>
                           ))}
                         </select>
-                        <RequiredMark />
+                        {!selectedLoanId && <RequiredMark />}
                       </FieldRow>
                       <FieldRow icon={<BankIcon />}>
                         <select className={rowSelectClass} value={bankId} onChange={(e) => setBankId(e.target.value)}>
@@ -335,7 +336,7 @@ export default function BorrowerRepayPage() {
                             </option>
                           ))}
                         </select>
-                        <RequiredMark />
+                        {!bankId && <RequiredMark />}
                       </FieldRow>
                       <FieldRow icon={<NoteIcon />}>
                         <div className="flex-1 min-w-0">

@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Sheet } from "@/app/components/Sheet"
-import { DateField, FieldRow, NoteIcon, rowInputClass } from "@/app/components/TransactionFormUI"
+import { DateField, FieldRow, NoteIcon, RequiredMark, rowInputClass } from "@/app/components/TransactionFormUI"
 import {
   distributeInvestmentGain,
   getUndistributedInvestmentGain,
@@ -130,7 +130,10 @@ export function InvestmentDetailsSheet({
     >
       <div className="space-y-4">
         <div>
-          <p className={sectionLabelClass}>Investment name</p>
+          <p className={sectionLabelClass}>
+            Investment name
+            <RequiredMark />
+          </p>
           <div className="card overflow-hidden">
             <FieldRow icon={<NoteIcon />}>
               <input
@@ -357,7 +360,11 @@ export function DistributeInvestmentSheet({
         </Callout>
 
         <div>
-          <p className={sectionLabelClass}>Amount</p>
+          <p className={sectionLabelClass}>
+            Amount
+            {/* Closing with nothing left to settle can be ₱0. */}
+            {!closing && <RequiredMark />}
+          </p>
           <div className="card overflow-hidden">
             <FieldRow icon={<span className="w-[18px] text-center text-ink-soft text-sm shrink-0">₱</span>}>
               <input
@@ -392,7 +399,7 @@ export function DistributeInvestmentSheet({
               </div>
             </FieldRow>
             <div className="border-t border-hairline">
-              <DateField value={date} onChange={setDate} placeholder="Date" bare />
+              <DateField value={date} onChange={setDate} placeholder="Date" bare required />
             </div>
             <div className="border-t border-hairline">
               <FieldRow icon={<NoteIcon />}>

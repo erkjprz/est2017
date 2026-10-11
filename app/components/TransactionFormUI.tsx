@@ -65,10 +65,13 @@ export function AmountHero({
   value,
   onChange,
   label,
-  helper
+  helper,
+  required
 }: {
   value: string
   onChange: (v: string) => void
+  // Shows the required * beside the number while it's still empty.
+  required?: boolean
   // Both optional and only rendered when given -- the number itself is
   // already the biggest thing on screen, so a caller with no real label/
   // helper to add (see NewTransactionSheet) isn't stuck reserving a blank
@@ -89,6 +92,11 @@ export function AmountHero({
           onChange={(e) => onChange(stripAmountFormatting(e.target.value))}
           className="text-size-intentional font-mono [font-variant-numeric:tabular-nums] text-4xl font-bold text-ink bg-transparent text-center w-full max-w-[220px] focus:outline-none placeholder:text-ink-soft/30"
         />
+        {required && !value && (
+          <span className="text-xl self-start">
+            <RequiredMark />
+          </span>
+        )}
       </div>
       {helper && <p className="text-sm text-ink-soft mt-2.5 max-w-xs mx-auto">{helper}</p>}
     </div>
@@ -484,11 +492,13 @@ export function DateField({
   value,
   onChange,
   placeholder,
-  bare
+  bare,
+  required
 }: {
   value: string
   onChange: (v: string) => void
   placeholder: string
+  required?: boolean
   // Icon-row layout (e.g. NewTransactionSheet's Details card) -- no border/
   // background of its own, sized by its own row padding instead of a fixed
   // height, and matches the plain text weight of its row siblings instead
@@ -523,7 +533,8 @@ export function DateField({
           <rect x="3.5" y="5" width="17" height="16" rx="2" />
           <path d="M8 3v4M16 3v4M3.5 10h17" strokeLinecap="round" />
         </svg>
-        <span className="truncate">{value ? formatFull(value) : placeholder}</span>
+        <span className="truncate flex-1 min-w-0">{value ? formatFull(value) : placeholder}</span>
+        {required && !value && <RequiredMark />}
       </div>
     </div>
   )

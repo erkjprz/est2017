@@ -10,6 +10,7 @@ import SubmitConfirmation from "@/app/components/SubmitConfirmation"
 import { LoanTermsCard } from "@/app/components/LoanTermsCard"
 import {
   AmountHero,
+  RequiredMark,
   FieldGroup,
   FieldRow,
   NoteIcon,
@@ -234,7 +235,7 @@ export default function BorrowerRequestLoanPage() {
           <div className="text-xs tracking-[0.18em] uppercase text-gold font-mono mb-2">Request a Loan</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-2">How much do you need?</h1>
 
-          <AmountHero value={amount} onChange={setAmount} />
+          <AmountHero value={amount} onChange={setAmount} required />
 
           <div className="space-y-4 mt-4">
             <StepTrack step={formStep} labels={["Details", "Review"]} />
@@ -280,6 +281,7 @@ export default function BorrowerRequestLoanPage() {
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">
                     Where should we send it?
+                    <RequiredMark />
                   </p>
                   <div className="card p-4 space-y-3">
                     <textarea
