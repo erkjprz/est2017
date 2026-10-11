@@ -453,7 +453,7 @@ const borrowerSections: FaqSection[] = [
         a: (
           <ol className="list-decimal list-inside space-y-1">
             <li>From your loan page, tap <strong>Make a payment</strong>.</li>
-            <li>Send the money to one of the fund&apos;s banks — the page shows where.</li>
+            <li>Send the money to one of the fund&apos;s banks — <strong>Scan to Pay</strong> on your loan page shows where.</li>
             <li>Enter the amount and which bank you sent it to. It starts at your usual payment; tick{" "}
               <strong>Remember for next time</strong> to keep the amount and bank for your next one.</li>
             <li>Attach a receipt or screenshot of the transfer.</li>

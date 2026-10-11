@@ -7,7 +7,6 @@ import BorrowerHeader from "@/app/components/BorrowerHeader"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import SubmitConfirmation from "@/app/components/SubmitConfirmation"
-import ScanToPayCard from "@/app/components/ScanToPayCard"
 import {
   AmountHero,
   BankIcon,
@@ -316,7 +315,7 @@ export default function BorrowerRepayPage() {
           <div className="text-xs tracking-[0.18em] uppercase text-gold font-mono mb-2">Your loan</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-2">Make a payment</h1>
           <p className="text-[13px] text-ink-soft mb-5">
-            Send it to one of the fund&apos;s banks, then record it here with the receipt.
+            Record a payment you&apos;ve sent to the fund, with its receipt.
           </p>
 
           {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load your loans: {loadError}</p>}
@@ -328,9 +327,6 @@ export default function BorrowerRepayPage() {
           ) : (
             !loadError && (
               <>
-                {/* Where to send the money, before the form that records it. */}
-                <ScanToPayCard />
-
                 <AmountHero value={amount} onChange={setAmount} label="Amount" />
 
                 <div className="space-y-5 mt-4">
