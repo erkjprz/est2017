@@ -1528,6 +1528,11 @@ export default function AdminPage() {
                     : "Approve"}
                 </button>
               </div>
+              {needsLoanBank && (
+                <p className="text-[11px] text-ink-soft text-center mt-2">
+                  The loan starts today — approve once the last transfer has gone out.
+                </p>
+              )}
             </>
           )
 
