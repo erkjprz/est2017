@@ -13,6 +13,9 @@ export type DashboardSnapshot = {
   fundCash: number | null
   myBalance: number | null
   pendingCount: number
+  // The member's own entries still waiting on an admin -- optional so
+  // snapshots cached before this field existed still read cleanly.
+  myPendingCount?: number
   recentTransactions: RecentTransaction[]
   asOf: string
 }
@@ -27,6 +30,7 @@ export type DashboardFields = {
   fundCash?: number
   myBalance?: number
   pendingCount: number
+  myPendingCount?: number
   recentTransactions?: RecentTransaction[]
   error: string | null
 }
@@ -79,6 +83,12 @@ export async function fetchDashboardFields(member: { member_id: string; role: st
           .eq("role", "borrower")
       : Promise.resolve({ count: 0, error: null })
 
+  const myPendingPromise = supabase
+    .from("transactions")
+    .select("transaction_id", { count: "exact", head: true })
+    .eq("member_id", member.member_id)
+    .eq("status", "pending")
+
   const recentTransactionsPromise = supabase
     .from("transactions")
     .select("transaction_id, txn_date, created_at, classification, amount, status")
@@ -88,8 +98,16 @@ export async function fetchDashboardFields(member: { member_id: string; role: st
     .order("created_at", { ascending: false })
     .limit(5)
 
-  const [fundResult, mineResult, pendingResult, pendingMembersResult, pendingBorrowersResult, recentTransactionsResult] =
-    await Promise.all([fundPromise, minePromise, pendingPromise, pendingMembersPromise, pendingBorrowersPromise, recentTransactionsPromise])
+  const [fundResult, mineResult, pendingResult, pendingMembersResult, pendingBorrowersResult, recentTransactionsResult, myPendingResult] =
+    await Promise.all([
+      fundPromise,
+      minePromise,
+      pendingPromise,
+      pendingMembersPromise,
+      pendingBorrowersPromise,
+      recentTransactionsPromise,
+      myPendingPromise
+    ])
 
   const firstError =
     fundResult.error ||
@@ -103,6 +121,7 @@ export async function fetchDashboardFields(member: { member_id: string; role: st
     fundCash: !fundResult.error && fundResult.data ? Number(fundResult.data.total_cash) : undefined,
     myBalance: !mineResult.error && mineResult.data ? Number(mineResult.data.withdrawable_now) : undefined,
     pendingCount: (pendingResult.count ?? 0) + (pendingMembersResult.count ?? 0) + (pendingBorrowersResult.count ?? 0),
+    myPendingCount: myPendingResult.error ? undefined : myPendingResult.count ?? 0,
     recentTransactions:
       !recentTransactionsResult.error && recentTransactionsResult.data
         ? recentTransactionsResult.data.map((r) => ({
@@ -128,6 +147,7 @@ export async function warmDashboardCache(member: { member_id: string; role: stri
     fundCash: fields.fundCash ?? null,
     myBalance: fields.myBalance ?? null,
     pendingCount: fields.pendingCount,
+    myPendingCount: fields.myPendingCount ?? 0,
     recentTransactions: fields.recentTransactions ?? [],
     asOf: new Date().toISOString()
   }

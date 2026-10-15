@@ -31,7 +31,7 @@ import { InvestmentPickerSheet, InvestmentRowIcon } from "@/app/components/Inves
 import { InterestRatePickerSheet } from "@/app/components/InterestRatePickerSheet"
 import { TermPickerSheet } from "@/app/components/TermPickerSheet"
 import { DueDayPickerSheet } from "@/app/components/DueDayPickerSheet"
-import { ordinalDay } from "@/lib/loanFormat"
+import { ordinalDay, loanPickLabel } from "@/lib/loanFormat"
 import { notifyTransactionsChanged } from "@/lib/transactionEvents"
 import { getCachedTransactionRow } from "@/lib/transactionRowCache"
 import { getCachedTransactionFormData } from "@/lib/transactionFormPrefetch"
@@ -888,7 +888,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
               literal space sitting right after a {expression} on a line
               break, which silently ate the gap before "Fix" here. */}
           {rejectionReason
-            ? `: ${rejectionReason} Fix what's wrong and save to send it back for review.`
+            ? `: ${/[.!?]$/.test(rejectionReason.trim()) ? rejectionReason.trim() : `${rejectionReason.trim()}.`} Fix what's wrong and save to send it back for review.`
             : " -- no reason was given. Fix what's wrong and save to send it back for review."}
         </p>
       )}
@@ -928,7 +928,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                     <span className="flex-1 min-w-0 text-sm">
                       {selectedLoan ? (
                         <span className="text-ink">
-                          ₱{fmt(selectedLoan.principal)} from {selectedLoan.start_date}
+                          {loanPickLabel(Number(selectedLoan.principal), selectedLoan.start_date, fmt)}
                         </span>
                       ) : (
                         <span className="text-ink-soft">Select a loan</span>

@@ -26,7 +26,8 @@ import {
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { ordinalDay } from "@/lib/loanFormat"
+import { ordinalDay, loanPickLabel } from "@/lib/loanFormat"
+import { fetchWithdrawable } from "@/lib/withdrawable"
 import { dateOnly } from "@/lib/currentValue"
 import { getCachedTransactionFormData, loadTransactionFormData } from "@/lib/transactionFormPrefetch"
 import { snapshotInvestmentHold } from "@/lib/snapshotHold"
@@ -152,7 +153,15 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   const [saveAsDefault, setSaveAsDefault] = useState(false)
   // Once the amount's been typed, picking a loan (or member) no longer
   // replaces it.
-  const [amountEdited, setAmountEdited] = useState(false)
+  const [amountEdited, setAmountEditedState] = useState(false)
+  // Mirrors amountEdited for the async loaders below: their closures hold
+  // the value from when the load started, so an amount typed while loans
+  // or defaults were still loading used to be overwritten when they landed.
+  const amountEditedRef = useRef(false)
+  function setAmountEdited(value: boolean) {
+    amountEditedRef.current = value
+    setAmountEditedState(value)
+  }
 
   // Loan Request is the only type in this reduced set with enough
   // conditional fields to earn its own Details -> Review sub-flow --
@@ -211,9 +220,10 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     const active = loans.filter((l) => l.status === "active")
     if (active.length === 1) {
       setSelectedLoanId(active[0].loan_id)
+      if (amountEditedRef.current) return
       const start = startingAmount(active[0], totals[active[0].loan_id] || 0, saved)
       setAmount(start > 0 ? String(start) : "")
-    } else {
+    } else if (!amountEditedRef.current) {
       setAmount(saved != null ? String(saved) : "")
     }
   }
@@ -269,7 +279,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
       // selectedType starts at "contribution" above, so only that default
       // needs applying here -- loan_payment's own default is applied by
       // handleTypeChange whenever someone actually switches to it.
-      if (data.contributionDefault != null) setAmount(String(data.contributionDefault))
+      if (data.contributionDefault != null && !amountEditedRef.current) setAmount(String(data.contributionDefault))
       if (data.contributionBankDefault) setBankId(data.contributionBankDefault)
 
       setDataLoading(false)
@@ -283,6 +293,25 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   }, [member])
 
   const effectiveMemberId = isAdmin && onBehalfOfId ? onBehalfOfId : memberId
+
+  // What the member can still withdraw (available balance less withdrawals
+  // already waiting) -- shown under the amount and checked before Submit.
+  // The database enforces the same limit; this just says it up front.
+  const [withdrawable, setWithdrawable] = useState<{ memberId: string; amount: number } | null>(null)
+  useEffect(() => {
+    if (selectedType !== "withdrawal" || !effectiveMemberId) return
+    let cancelled = false
+    fetchWithdrawable([effectiveMemberId])
+      .then((map) => {
+        const w = map[effectiveMemberId]
+        if (!cancelled && w) setWithdrawable({ memberId: effectiveMemberId, amount: Math.max(0, w.withdrawableNow - w.pendingOut) })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [selectedType, effectiveMemberId])
+  const withdrawableNow = withdrawable && withdrawable.memberId === effectiveMemberId ? withdrawable.amount : null
   const submittedByForOnBehalf = isAdmin && onBehalfOfId ? memberId : null
 
   const activeLoans = myLoans.filter((l) => l.status === "active")
@@ -323,8 +352,10 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   // Every required field that's still empty for this type. Nothing is marked
   // up front (only "(optional)" fields say anything); once Submit/Continue
   // is tapped with gaps, each one here shows its own message.
+  const overWithdrawable =
+    selectedType === "withdrawal" && withdrawableNow != null && isValidPositiveNumber(amount) && Number(amount) > withdrawableNow + 0.004
   const missing = {
-    amount: !isValidPositiveNumber(amount),
+    amount: !isValidPositiveNumber(amount) || overWithdrawable,
     date: !txnDate,
     bank: needsBank && !bankId,
     toBank: isBankTransfer && !toBankId,
@@ -465,7 +496,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     if (newType === "contribution" && memberId) {
       const { contrib, contribBank } = await loadPreferencesFor(onBehalfOfId || memberId, seq)
       if (isStale(seq)) return
-      if (contrib != null) setAmount(String(contrib))
+      if (contrib != null && !amountEditedRef.current) setAmount(String(contrib))
       if (contribBank) setBankId(contribBank)
     }
   }
@@ -483,13 +514,8 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         loadPreferencesFor(target, seq)
       ])
       if (isStale(seq)) return
-      if (!amountEdited) {
-        applyLoanPaymentStart(loans, totals, loanPay)
-      } else {
-        // Keep the typed amount; still pick the member's only loan.
-        const active = loans.filter((l) => l.status === "active")
-        if (active.length === 1) setSelectedLoanId(active[0].loan_id)
-      }
+      // Keeps a typed amount; still picks the member's only loan.
+      applyLoanPaymentStart(loans, totals, loanPay)
       if (!bankId && loanPayBank) setBankId(loanPayBank)
     }
 
@@ -999,8 +1025,13 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
               setAmount(v)
               setAmountEdited(true)
             }}
-            error={err("amount", "Enter an amount")}
+            error={err("amount", overWithdrawable ? `More than your ₱${fmt(withdrawableNow ?? 0)} available` : "Enter an amount")}
           />
+          {isWithdrawal && withdrawableNow != null && !(showErrors && overWithdrawable) && (
+            <p className={`-mt-2 text-center text-xs font-mono ${overWithdrawable ? "text-rust" : "text-ink-soft"}`}>
+              ₱{fmt(withdrawableNow)} available to withdraw
+            </p>
+          )}
 
           <div className="space-y-4 mt-4">
             {!isStepped && (
@@ -1032,7 +1063,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                         <span className="flex-1 min-w-0 text-sm">
                           {selectedLoan ? (
                             <span className="text-ink">
-                              ₱{fmt(selectedLoan.principal)} from {selectedLoan.start_date}
+                              {loanPickLabel(Number(selectedLoan.principal), selectedLoan.start_date, fmt)}
                             </span>
                           ) : (
                             <span className="text-ink-soft">Which loan</span>
@@ -1229,7 +1260,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                       label="Interest"
                       value={interestType === "rate" ? `${interestRate || 0}%` : `₱${fmt(Number(interestAmount) || 0)} fixed`}
                     />
-                    <ReviewRow label="Term" value={`${termMonths || 0} months`} />
+                    <ReviewRow label="Term" value={`${termMonths || 0} ${termMonths === "1" ? "month" : "months"}`} />
                     <ReviewRow
                       label="Repayment"
                       value={repaymentFrequency === "monthly" ? "Monthly installments" : "Lump sum at end of term"}

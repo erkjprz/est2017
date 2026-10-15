@@ -6,6 +6,7 @@ import { useAuth } from "@/app/auth-context"
 import { supabase } from "@/lib/supabase"
 import { listConversations } from "@/lib/conversations"
 import { readCache, writeCache } from "@/lib/cache"
+import { useHydrated } from "@/lib/useHydrated"
 
 // Header shortcut to /messages, sitting beside NotificationBell -- chat was
 // otherwise only reachable from the Menu page / dropdown, which made it
@@ -18,6 +19,10 @@ export function ChatButton() {
   const pathname = usePathname()
   const { member } = useAuth()
   const cacheKey = member ? `chat-badge:${member.member_id}` : null
+  // member comes from a browser-only cache, so the server never renders
+  // this button -- wait for hydration (like NotificationBell) so the first
+  // client render matches the server HTML instead of tripping React #418.
+  const hydrated = useHydrated()
   const [unreadCount, setUnreadCount] = useState(() => (cacheKey ? readCache<number>(cacheKey) ?? 0 : 0))
 
   useEffect(() => {
@@ -59,7 +64,7 @@ export function ChatButton() {
     // pathname: re-count after leaving a thread, which marks it read.
   }, [member, pathname])
 
-  if (!member) return null
+  if (!member || !hydrated) return null
 
   return (
     <button

@@ -112,3 +112,11 @@ export function ordinalDay(day: number): string {
   const suffix = { 1: "st", 2: "nd", 3: "rd" }[day % 10] ?? "th"
   return `${day}${suffix}`
 }
+
+// How a loan is named wherever a member picks which one they're paying:
+// "₱10,000.00 loan · Oct 15, 2026" -- the raw "from 2026-10-15" read like
+// a database dump.
+export function loanPickLabel(principal: number, startDate: string, fmt: (n: number) => string): string {
+  const date = new Date(`${startDate}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+  return `₱${fmt(principal)} loan · ${date}`
+}

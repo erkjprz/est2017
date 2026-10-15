@@ -206,6 +206,19 @@ function TransactionsPageInner() {
   const [selectedStatus, setSelectedStatus] = useState("")
   // The row whose detail sheet is open.
   const [openTxnId, setOpenTxnId] = useState<string | null>(null)
+  // ?txn= arrives from an "Approved" notification -- open that row's detail
+  // sheet (it shows once the list has loaded) and drop the param in place.
+  // Adjusted during render rather than in an effect, so a second
+  // notification tapped while already here still opens.
+  const requestedTxnId = searchParams.get("txn")
+  const [seenTxnParam, setSeenTxnParam] = useState<string | null>(null)
+  if (requestedTxnId !== seenTxnParam) {
+    setSeenTxnParam(requestedTxnId)
+    if (requestedTxnId) setOpenTxnId(requestedTxnId)
+  }
+  useEffect(() => {
+    if (requestedTxnId) router.replace("/transactions", { scroll: false })
+  }, [requestedTxnId, router])
   // Bumped to remount SearchBox, which owns its own text -- the way "Clear
   // filters" on an empty result also clears the search.
   const [searchKey, setSearchKey] = useState(0)

@@ -27,6 +27,7 @@ export default function DashboardPage() {
   const [fundCash, setFundCash] = useState<number | null>(cached?.fundCash ?? null)
   const [myBalance, setMyBalance] = useState<number | null>(cached?.myBalance ?? null)
   const [pendingCount, setPendingCount] = useState(cached?.pendingCount ?? 0)
+  const [myPendingCount, setMyPendingCount] = useState(cached?.myPendingCount ?? 0)
   const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>(cached?.recentTransactions ?? [])
   const [loadError, setLoadError] = useState("")
 
@@ -58,12 +59,14 @@ export default function DashboardPage() {
       const nextFundCash = fields.fundCash ?? fundCash
       const nextMyBalance = fields.myBalance ?? myBalance
       const nextPendingCount = fields.pendingCount
+      const nextMyPendingCount = fields.myPendingCount ?? myPendingCount
       const nextRecentTransactions = fields.recentTransactions ?? recentTransactions
       const nextAsOf = new Date()
 
       setFundCash(nextFundCash)
       setMyBalance(nextMyBalance)
       setPendingCount(nextPendingCount)
+      setMyPendingCount(nextMyPendingCount)
       setRecentTransactions(nextRecentTransactions)
       setAsOf(nextAsOf)
       setDataLoading(false)
@@ -72,6 +75,7 @@ export default function DashboardPage() {
         fundCash: nextFundCash,
         myBalance: nextMyBalance,
         pendingCount: nextPendingCount,
+        myPendingCount: nextMyPendingCount,
         recentTransactions: nextRecentTransactions,
         asOf: nextAsOf.toISOString()
       })
@@ -158,6 +162,22 @@ export default function DashboardPage() {
             <p className="mt-2 mb-4 text-sm text-rust">
               Couldn't load some dashboard data: {loadError}
             </p>
+          )}
+
+          {/* The member's own entries still with an admin -- the submit
+              toast is gone in a few seconds, this stays until each one is
+              approved or rejected. */}
+          {myPendingCount > 0 && (
+            <button
+              onClick={() => router.push("/transactions")}
+              className="mb-5 w-full text-left bg-paper-2 border border-hairline rounded-md px-5 py-3.5 flex items-center justify-between"
+            >
+              <p className="text-sm text-ink">
+                <span className="font-mono text-gold mr-1.5">●</span>
+                {myPendingCount} of your {myPendingCount === 1 ? "entries is" : "entries are"} waiting for approval
+              </p>
+              <span className="text-ink-soft">→</span>
+            </button>
           )}
 
           {/* Admin-only: fund-wide items needing action -- the one thing on

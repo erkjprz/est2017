@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Portal } from "@/app/components/Portal"
 
-const VISIBLE_MS = 3000
+const VISIBLE_MS = 5000
 const EXIT_MS = 200
 
 // Brief top-anchored confirmation, e.g. after submitting a transaction
