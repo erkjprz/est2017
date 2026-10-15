@@ -1,5 +1,6 @@
 "use client"
 
+import { loanPickLabel } from "@/lib/loanFormat"
 import { Sheet } from "@/app/components/Sheet"
 import { totalRepayable } from "@/lib/loanMath"
 
@@ -63,7 +64,7 @@ export function LoanPickerSheet({
                 <LoanRowIcon />
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-semibold text-ink">
-                    ₱{fmt(loan.principal)} from {loan.start_date}
+                    {loanPickLabel(Number(loan.principal), loan.start_date, fmt)}
                   </span>
                   <span className="block text-xs text-ink-soft mt-0.5">₱{fmt(remaining)} left to pay</span>
                 </span>

@@ -40,6 +40,7 @@ import {
 } from "@/lib/bankImpact"
 import { ApprovalResultCard, BankImpactPreview, type ApprovalResult } from "@/app/components/BankImpact"
 import { MessagesButton } from "@/app/components/admin/MessagesButton"
+import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -95,6 +96,29 @@ type ExportRow = {
   created_at: string
 }
 
+// Entries a member sent in again after a rejection, or the same amount
+// twice within this window, get flagged on their queue card.
+const DUPLICATE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000
+
+type QueueFlag = { label: string; tone: "warn" | "info" }
+
+// The fields flagsFor/contextFor read off a pending transaction row.
+type QueueTxn = {
+  transaction_id: string
+  member_id: string | null
+  classification: string
+  amount: number
+  loan_id: string | null
+  receipt_url: string | null
+  created_at: string
+  resubmitted_at?: string | null
+  previous_amount?: number | null
+}
+
+type RecentEntry = Pick<QueueTxn, "transaction_id" | "member_id" | "classification" | "amount" | "created_at"> & { status: string }
+
+type LoanToClose = { loan_id: string; loan: string; total_repayable: number; last_repayment_date: string | null }
+
 function timeAgo(dateStr: string): string {
   const diffMs = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diffMs / 60000)
@@ -108,11 +132,14 @@ function timeAgo(dateStr: string): string {
 
 // "Oct 9 · 2h ago" -- the transaction's own date plus how long it's been
 // waiting, so several similar pending items can be told apart at a glance.
-function queuedLabel(t: { txn_date?: string | null; created_at: string }): string {
+function queuedLabel(t: { txn_date?: string | null; created_at: string; resubmitted_at?: string | null }): string {
   const date = t.txn_date
     ? new Date(`${t.txn_date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })
     : null
-  return [date, timeAgo(t.created_at)].filter(Boolean).join(" · ")
+  // A resubmitted entry's age is how long it's been back in the queue
+  // (what changed shows on its Resubmitted flag).
+  const waiting = t.resubmitted_at ? `resent ${timeAgo(t.resubmitted_at)}` : timeAgo(t.created_at)
+  return [date, waiting].filter(Boolean).join(" · ")
 }
 
 export default function AdminPage() {
@@ -199,6 +226,15 @@ export default function AdminPage() {
     return () => clearTimeout(timer)
   }, [lastApproval, approvalPinned])
 
+  // Context loaded alongside the queue so each card can say what the
+  // admin would otherwise have to look up: the member's available balance
+  // (withdrawals), what's still owed (loan payments), recent look-alike
+  // entries (possible duplicates), and fully repaid loans left open.
+  const [memberWithdrawable, setMemberWithdrawable] = useState<Record<string, Withdrawable>>({})
+  const [loanOutstanding, setLoanOutstanding] = useState<Record<string, number>>({})
+  const [recentSimilar, setRecentSimilar] = useState<RecentEntry[]>([])
+  const [loansToClose, setLoansToClose] = useState<LoanToClose[]>([])
+
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
 
@@ -253,6 +289,9 @@ export default function AdminPage() {
       .then(setBankBalances)
       .catch(() => setBankBalances(null))
 
+    // Same for the per-card context -- nice to have, never blocking.
+    loadQueueContext(pendingTxnsRes.error ? [] : pendingTxnsRes.data ?? []).catch(() => {})
+
     setPendingMembers(pendingMembersRes.data ?? [])
     setUnclaimedMembers(unclaimedMembersRes.data ?? [])
     setBanks(banksRes.data ?? [])
@@ -269,6 +308,95 @@ export default function AdminPage() {
       pendingTransactions: pendingTxnsRes.error ? [] : pendingTxnsRes.data ?? [],
       borrowerMembers: borrowerMembersRes.data ?? []
     })
+  }
+
+  async function loadQueueContext(pending: QueueTxn[]) {
+    const withdrawalMembers = pending
+      .filter((t) => t.classification === "Member Withdrawal" && t.member_id)
+      .map((t) => t.member_id as string)
+    const loanIds = Array.from(
+      new Set(pending.filter((t) => t.classification === "Loan Repayment" && t.loan_id).map((t) => t.loan_id as string))
+    )
+    const memberIds = Array.from(new Set(pending.map((t) => t.member_id).filter((id): id is string => !!id)))
+    const since = new Date(Date.now() - 2 * DUPLICATE_WINDOW_MS).toISOString()
+
+    const [withdrawable, outstandingRes, similarRes, toCloseRes] = await Promise.all([
+      fetchWithdrawable(withdrawalMembers).catch(() => ({} as Record<string, Withdrawable>)),
+      loanIds.length
+        ? supabase.from("v_loan_summary").select("loan_id, outstanding").in("loan_id", loanIds)
+        : Promise.resolve({ data: [] as { loan_id: string; outstanding: number }[], error: null }),
+      memberIds.length
+        ? supabase
+            .from("transactions")
+            .select("transaction_id, member_id, classification, amount, status, created_at")
+            .in("member_id", memberIds)
+            .in("status", ["pending", "approved"])
+            .gte("created_at", since)
+        : Promise.resolve({ data: [] as RecentEntry[], error: null }),
+      supabase.from("v_loan_summary").select("loan_id, loan, borrower, total_repayable, last_repayment_date").eq("status", "active").lte("outstanding", 0)
+    ])
+
+    setMemberWithdrawable(withdrawable)
+    const outstanding: Record<string, number> = {}
+    ;(outstandingRes.data ?? []).forEach((r) => (outstanding[r.loan_id] = Number(r.outstanding)))
+    setLoanOutstanding(outstanding)
+    setRecentSimilar(similarRes.data ?? [])
+    setLoansToClose(toCloseRes.data ?? [])
+  }
+
+  // What the admin should notice before approving -- each one a short chip
+  // on the queue card and a line in the review sheet.
+  function flagsFor(t: QueueTxn): QueueFlag[] {
+    const flags: QueueFlag[] = []
+    const amount = Number(t.amount)
+    const isIn = FLOW[t.classification]?.tone === "in"
+    const isOut = FLOW[t.classification]?.tone === "out"
+
+    if ((isIn && amount <= 0) || (isOut && amount >= 0)) flags.push({ label: "Wrong sign", tone: "warn" })
+    if (BULK_CLASSIFICATIONS.has(t.classification) && !t.receipt_url) flags.push({ label: "No receipt", tone: "warn" })
+
+    if (t.classification === "Member Withdrawal" && t.member_id && memberWithdrawable[t.member_id]) {
+      const w = memberWithdrawable[t.member_id]
+      // Everything else this member has waiting to go out, not this one.
+      const available = w.withdrawableNow - (w.pendingOut - Math.abs(amount))
+      if (Math.abs(amount) > available + 0.004) flags.push({ label: "Over balance", tone: "warn" })
+    }
+
+    if (t.classification === "Loan Repayment" && t.loan_id && loanOutstanding[t.loan_id] !== undefined) {
+      if (amount > loanOutstanding[t.loan_id] + 0.004) flags.push({ label: "More than owed", tone: "warn" })
+    }
+
+    const created = new Date(t.created_at).getTime()
+    const lookAlike = recentSimilar.some(
+      (o) =>
+        o.transaction_id !== t.transaction_id &&
+        o.member_id === t.member_id &&
+        o.classification === t.classification &&
+        Number(o.amount) === amount &&
+        Math.abs(new Date(o.created_at).getTime() - created) <= DUPLICATE_WINDOW_MS
+    )
+    if (lookAlike) flags.push({ label: "Possible duplicate", tone: "warn" })
+
+    if (t.resubmitted_at) {
+      flags.push({
+        label: t.previous_amount != null ? `Resubmitted · was ₱${fmt(Math.abs(Number(t.previous_amount)))}` : "Resubmitted",
+        tone: "info"
+      })
+    }
+    return flags
+  }
+
+  // One extra line of context under the card's type line.
+  function contextFor(t: QueueTxn): string | null {
+    if (t.classification === "Member Withdrawal" && t.member_id && memberWithdrawable[t.member_id]) {
+      const w = memberWithdrawable[t.member_id]
+      const available = Math.max(0, w.withdrawableNow - (w.pendingOut - Math.abs(Number(t.amount))))
+      return `₱${fmt(available)} available to withdraw`
+    }
+    if (t.classification === "Loan Repayment" && t.loan_id && loanOutstanding[t.loan_id] !== undefined) {
+      return `₱${fmt(loanOutstanding[t.loan_id])} left on loan`
+    }
+    return null
   }
 
   useEffect(() => {
@@ -788,21 +916,28 @@ export default function AdminPage() {
   // reject sheet is open, bulkTransactions and reviewTransactions never
   // overlapping so this and Review Transaction's own reject state can never
   // both resolve to a real row at once.
-  const rejectingBulkTxn = bulkTransactions.find((t) => t.transaction_id === rejectingId) ?? null
+  // Since Confirmed money rows also open the review sheet, rejecting from
+  // inside that sheet uses the sheet's own prompt -- skip this one then,
+  // or both prompts opened at once.
+  const rejectingBulkTxn =
+    rejectingId !== reviewingTxnId ? bulkTransactions.find((t) => t.transaction_id === rejectingId) ?? null : null
 
-  const pendingAmountTotal = pendingTransactions.reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0)
+  // Money coming in and going out are totalled separately -- adding a
+  // contribution and a loan release together described neither.
+  const pendingInTotal = pendingTransactions.reduce((sum, t) => sum + (Number(t.amount) > 0 ? Number(t.amount) : 0), 0)
+  const pendingOutTotal = pendingTransactions.reduce((sum, t) => sum + (Number(t.amount) < 0 ? -Number(t.amount) : 0), 0)
   const pendingBorrowers = borrowerMembers.filter((m) => m.status === "pending")
   const reviewingSignup = pendingMembers.find((m) => m.member_id === reviewingSignupId) ?? null
   const reviewingBorrower = pendingBorrowers.find((m) => m.member_id === reviewingBorrowerId) ?? null
 
   const signupsCount = pendingMembers.length + pendingBorrowers.length
-  const totalCount = pendingTransactions.length + signupsCount
+  const totalCount = pendingTransactions.length + signupsCount + loansToClose.length
 
   // Only categories that have something waiting -- and no chip row at all
   // when there'd be nothing to switch between (one category, or none).
   const chips: { id: Filter; label: string; count: number }[] = [
     { id: "all" as Filter, label: "All", count: totalCount },
-    { id: "txn" as Filter, label: "Transactions", count: pendingTransactions.length },
+    { id: "txn" as Filter, label: "Transactions", count: pendingTransactions.length + loansToClose.length },
     { id: "signup" as Filter, label: "Signups", count: signupsCount }
   ].filter((c) => c.id === "all" || c.count > 0)
   const showChips = chips.length > 2
@@ -1000,10 +1135,11 @@ export default function AdminPage() {
                               {t.bank_accounts && ` · ${t.bank_accounts.account_name || t.bank_accounts.bank_name}`}
                             </span>
                             <span className="block text-[11px] text-ink-soft font-mono truncate">{queuedLabel(t)}</span>
+                            <QueueCardExtras context={contextFor(t)} note={t.description?.trim()} flags={flagsFor(t)} />
                           </span>
                         </button>
                         <div className="shrink-0 text-right">
-                          <p className="text-sm font-mono">₱{fmt(t.amount)}</p>
+                          <p className="text-sm font-mono">{Number(t.amount) < 0 ? "−" : ""}₱{fmt(Math.abs(t.amount))}</p>
                           <div className="flex items-center justify-end gap-2 mt-0.5">
                             {t.receipt_url && (
                               <button
@@ -1051,7 +1187,7 @@ export default function AdminPage() {
                             disabled={bulkApproving}
                             className="w-full bg-ink text-paper px-4 py-3 rounded-full text-sm font-bold shadow-lg disabled:opacity-50 disabled:shadow-none"
                           >
-                            {bulkApproving ? "Approving…" : `Approve ₱${fmt(t.amount)}`}
+                            {bulkApproving ? "Approving…" : `Approve ${Number(t.amount) < 0 ? "−" : ""}₱${fmt(Math.abs(t.amount))}`}
                           </button>
                         </div>
                       )}
@@ -1059,41 +1195,54 @@ export default function AdminPage() {
                   ))}
                 </div>
 
-                {bulkTransactions.length > 1 && selectedBulkIds.size > 0 && (
-                  <div
-                    className="sticky z-10 mt-3 bg-ink text-paper rounded-md px-4 py-3 shadow-lg"
-                    // Above the bottom dock -- at bottom-4 it stuck *under* the
-                    // dock once the queue was long enough to scroll.
-                    style={{ bottom: "calc(var(--dock-h) + 0.75rem)" }}
-                  >
-                    <BankImpactPreview
-                      {...groupImpacts(
-                        bulkTransactions.filter((t) => selectedBulkIds.has(t.transaction_id)).map(impactFor)
-                      )}
-                      balances={bankBalances}
-                      compact
-                      className="mb-2.5 pb-2.5 border-b border-paper/20"
-                    />
-                    <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-mono">{selectedBulkIds.size} selected</span>
-                    <div className="flex gap-2">
-                      <button
-                        className="border border-paper/30 text-paper px-3 py-2 rounded-md text-sm"
-                        onClick={() => setSelectedBulkIds(new Set())}
-                      >
-                        Clear
-                      </button>
-                      <button
-                        className="bg-paper text-ink px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50"
-                        onClick={approveBulkSelected}
-                        disabled={bulkApproving}
-                      >
-                        {bulkApproving ? "Approving..." : `Approve ${selectedBulkIds.size}`}
-                      </button>
+                {bulkTransactions.length > 1 && selectedBulkIds.size > 0 && (() => {
+                  const selected = bulkTransactions.filter((t) => selectedBulkIds.has(t.transaction_id))
+                  const selectedTotal = selected.reduce((sum, t) => sum + Number(t.amount), 0)
+                  return (
+                    <div
+                      // Theme card rather than an inverted block -- in dark
+                      // mode bg-ink turned it into a bright white slab.
+                      className="sticky z-10 mt-3 bg-paper-2 border border-hairline rounded-2xl px-4 py-3.5 shadow-[0_-8px_30px_rgba(0,0,0,0.25)]"
+                      // Above the bottom dock -- at bottom-4 it stuck *under* the
+                      // dock once the queue was long enough to scroll.
+                      style={{ bottom: "calc(var(--dock-h) + 0.75rem)" }}
+                    >
+                      <BankImpactPreview
+                        {...groupImpacts(selected.map(impactFor))}
+                        balances={bankBalances}
+                        compact
+                        className="mb-3 pb-3 border-b border-hairline"
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block text-xs text-ink-soft">{selectedBulkIds.size} selected</span>
+                          <span
+                            className={`block font-mono [font-variant-numeric:tabular-nums] text-[15px] ${
+                              selectedTotal < 0 ? "text-rust" : "text-sage"
+                            }`}
+                          >
+                            {selectedTotal < 0 ? "−" : "+"}₱{fmt(Math.abs(selectedTotal))}
+                          </span>
+                        </span>
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            className="border border-hairline text-ink px-4 py-2.5 rounded-full text-sm whitespace-nowrap"
+                            onClick={() => setSelectedBulkIds(new Set())}
+                          >
+                            Clear
+                          </button>
+                          <button
+                            className="bg-ink text-paper px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap disabled:opacity-50"
+                            onClick={approveBulkSelected}
+                            disabled={bulkApproving}
+                          >
+                            {bulkApproving ? "Approving..." : `Approve ${selectedBulkIds.size}`}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    </div>
-                  </div>
-                )}
+                  )
+                })()}
 
               </section>
             )}
@@ -1134,6 +1283,7 @@ export default function AdminPage() {
                             {t.submitted_by_member && ` · by ${t.submitted_by_member.name}`}
                           </p>
                           <p className="text-[11px] text-ink-soft font-mono truncate">{queuedLabel(t)}</p>
+                          <QueueCardExtras context={contextFor(t)} note={t.description?.trim()} flags={flagsFor(t)} />
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="text-sm font-mono">₱{fmt(Math.abs(t.amount))}</p>
@@ -1144,10 +1294,51 @@ export default function AdminPage() {
                   })}
                 </div>
 
-                <p className="mt-3 text-xs text-ink-soft font-mono">
-                  ₱{fmt(pendingAmountTotal)} pending total
-                </p>
 
+              </section>
+            )}
+
+            {showTxns && pendingTransactions.length > 0 && (
+              <p className="-mt-4 text-xs text-ink-soft font-mono">
+                Pending:{" "}
+                {[pendingInTotal > 0 ? `₱${fmt(pendingInTotal)} in` : null, pendingOutTotal > 0 ? `₱${fmt(pendingOutTotal)} out` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
+
+            {/* ---- Fully repaid loans still open ---- */}
+            {showTxns && loansToClose.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold">Ready to close</span>
+                  <span className="shrink-0 text-[11px] font-mono uppercase tracking-wide text-ink-soft border border-hairline rounded-full px-2.5 py-1">
+                    {loansToClose.length}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-soft">
+                  Paid in full but still active — closing shares out the gain.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {loansToClose.map((l) => (
+                    <button
+                      key={l.loan_id}
+                      type="button"
+                      onClick={() => router.push(`/fund-breakdown?tab=loans&loan=${l.loan_id}`)}
+                      className="w-full card flex items-center gap-3 px-4 py-3 text-left"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display font-medium truncate text-sm">{l.loan}</p>
+                        <p className="text-xs text-ink-soft truncate">
+                          ₱{fmt(l.total_repayable)} repaid
+                          {l.last_repayment_date &&
+                            ` · last payment ${new Date(`${l.last_repayment_date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[11px] font-mono text-gold">Close →</span>
+                    </button>
+                  ))}
+                </div>
               </section>
             )}
 
@@ -1393,6 +1584,17 @@ export default function AdminPage() {
               </FieldRow>
             </div>
             <p className="px-1 pt-2 text-xs text-ink-soft">{subtitle}</p>
+            {(() => {
+              const flags = flagsFor(t)
+              const context = contextFor(t)
+              if (!flags.length && !context) return null
+              return (
+                <div className="px-1 pt-2 space-y-1.5">
+                  {context && <p className="text-xs font-mono text-ink">{context}</p>}
+                  {flags.length > 0 && <FlagChips flags={flags} />}
+                </div>
+              )
+            })()}
 
             {isConfirmedMoney ? (
               <div className="text-center py-6">
@@ -1762,7 +1964,7 @@ export default function AdminPage() {
                 <span className="font-semibold text-ink">{rejectingBulkTxn.members?.name || "Fund"}</span>
                 <span className="text-ink-soft"> · {typeLabels[rejectingBulkTxn.classification] || rejectingBulkTxn.classification}</span>
               </span>
-              <span className="shrink-0 text-sm font-mono">₱{fmt(rejectingBulkTxn.amount)}</span>
+              <span className="shrink-0 text-sm font-mono">{Number(rejectingBulkTxn.amount) < 0 ? "−" : ""}₱{fmt(Math.abs(rejectingBulkTxn.amount))}</span>
             </FieldRow>
           </div>
 
@@ -1840,5 +2042,39 @@ function ImpactTag({ impact }: { impact: TxnImpact }) {
     <span className="shrink-0 text-[9px] uppercase tracking-wide font-mono text-gold border border-gold/40 rounded px-1.5 py-0.5">
       {impact.reason === "no_bank" ? "No bank" : "No cash"}
     </span>
+  )
+}
+
+function FlagChips({ flags }: { flags: QueueFlag[] }) {
+  return (
+    <span className="flex flex-wrap gap-1">
+      {flags.map((f) => (
+        <span
+          key={f.label}
+          className={`text-[9px] uppercase tracking-wide font-mono rounded px-1.5 py-0.5 border ${
+            f.tone === "warn" ? "text-rust border-rust/50 bg-rust/5" : "text-gold border-gold/40"
+          }`}
+        >
+          {f.label}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// The lines under a queue card's date: balance or loan context, the
+// member's own note, and anything worth a second look before approving.
+function QueueCardExtras({ context, note, flags }: { context: string | null; note?: string | null; flags: QueueFlag[] }) {
+  if (!context && !note && flags.length === 0) return null
+  return (
+    <>
+      {context && <span className="block text-[11px] text-ink font-mono truncate">{context}</span>}
+      {note && <span className="block text-[11px] text-ink-soft italic truncate">&ldquo;{note}&rdquo;</span>}
+      {flags.length > 0 && (
+        <span className="block mt-1">
+          <FlagChips flags={flags} />
+        </span>
+      )}
+    </>
   )
 }
