@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import Navbar from "@/app/components/Navbar"
@@ -50,6 +50,7 @@ export default function ConversationPage() {
   const [sendError, setSendError] = useState("")
   const [statusBusy, setStatusBusy] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const requestedNames = useRef(new Set<string>())
 
   useEffect(() => {
@@ -153,6 +154,16 @@ export default function ConversationPage() {
     if (accepted.length > 0) setFiles((prev) => [...prev, ...accepted])
   }
 
+  // Grow the reply box with its text (up to max-h-36, then it scrolls).
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [draft])
+
+  const canSend = !sending && (draft.trim().length > 0 || files.length > 0)
+
   async function send() {
     const body = draft.trim()
     if ((!body && files.length === 0) || sending || !member) return
@@ -215,7 +226,14 @@ export default function ConversationPage() {
     <>
       <Header />
       <main className="min-h-screen bg-paper text-ink font-sans overflow-x-hidden">
-        <div className="max-w-3xl mx-auto px-4 sm:px-5 pt-8 pb-[calc(9rem+var(--dock-h)+env(safe-area-inset-bottom))]">
+        {/* Clears the fixed composer, which is taller while files are queued. */}
+        <div
+          className={`max-w-3xl mx-auto px-4 sm:px-5 pt-8 ${
+            files.length > 0
+              ? "pb-[calc(14rem+var(--dock-h)+env(safe-area-inset-bottom))]"
+              : "pb-[calc(9rem+var(--dock-h)+env(safe-area-inset-bottom))]"
+          }`}
+        >
           <button
             onClick={() => router.push("/messages")}
             className="text-[13px] text-ink-soft mb-4 hover:text-ink transition-colors"
@@ -284,34 +302,51 @@ export default function ConversationPage() {
         <div className="fixed inset-x-0 z-30 bg-paper border-t border-hairline" style={{ bottom: composerBottom }}>
           <div className="max-w-3xl mx-auto px-4 sm:px-5 py-3">
             {sendError && <p className="text-xs text-rust mb-2">{sendError}</p>}
-            {files.length > 0 && (
-              <div className="mb-2.5">
-                <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
+            {/* One bar, chat-app style: attach, a text box that grows with
+                what's typed, and send -- with pending files inside it. */}
+            <div className="card overflow-hidden focus-within:border-gold transition-colors">
+              {files.length > 0 && (
+                <div className="px-2.5 pt-2.5">
+                  <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
+                </div>
+              )}
+              <div className="flex items-end gap-1 p-1.5">
+                <AttachButton count={files.length} disabled={sending} onPick={addFiles} />
+                <textarea
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      send()
+                    }
+                  }}
+                  maxLength={BODY_MAX}
+                  rows={1}
+                  aria-label="Message"
+                  placeholder={files.length > 0 ? "Add a note (optional)" : isAdmin ? "Reply as the admin team…" : "Write a message…"}
+                  // 16px on phones: iOS zooms the page into any input smaller than that.
+                  className="flex-1 min-w-0 bg-transparent px-1.5 py-2 text-base sm:text-sm leading-6 text-ink placeholder:text-ink-soft outline-none resize-none max-h-36"
+                />
+                <button
+                  type="button"
+                  onClick={send}
+                  disabled={!canSend}
+                  aria-label="Send"
+                  className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                    canSend ? "bg-gold text-paper" : "bg-paper text-ink-soft"
+                  }`}
+                >
+                  {sending ? (
+                    <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" className="w-[18px] h-[18px]">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
+                    </svg>
+                  )}
+                </button>
               </div>
-            )}
-            <div className="flex items-end gap-1.5">
-              <AttachButton count={files.length} disabled={sending} onPick={addFiles} />
-              <textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault()
-                    send()
-                  }
-                }}
-                maxLength={BODY_MAX}
-                rows={2}
-                placeholder={files.length > 0 ? "Add a note (optional)" : isAdmin ? "Reply as the admin team…" : "Write a message…"}
-                className="flex-1 min-w-0 card px-3 py-2 text-sm text-ink placeholder:text-ink-soft outline-none resize-none"
-              />
-              <button
-                onClick={send}
-                disabled={sending || (!draft.trim() && files.length === 0)}
-                className="shrink-0 bg-ink text-paper px-4 py-2.5 rounded-md text-sm font-semibold disabled:opacity-50"
-              >
-                {sending ? "..." : "Send"}
-              </button>
             </div>
           </div>
         </div>
