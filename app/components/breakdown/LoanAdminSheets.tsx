@@ -297,7 +297,8 @@ export function ReleaseLoanSheet({
             {approving ? "Releasing..." : `Approve & Release ₱${fmt(adminLoan.principal)}`}
           </button>
           <p className="text-[11px] text-ink-soft text-center mt-2">
-            Activates the loan and sets aside each member&apos;s share of it.
+            The loan starts today — approve once the last transfer has gone out. Activates the loan and
+            sets aside each member&apos;s share of it.
           </p>
         </div>
       }

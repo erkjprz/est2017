@@ -569,7 +569,10 @@ const adminSections: FaqSection[] = [
           <p>
             It does two things at once: activates the loan (its status changes from{" "}
             <strong>requested</strong> to <strong>active</strong>) and records which bank disbursed it — you
-            don&apos;t need a separate step on the loan&apos;s own page.
+            don&apos;t need a separate step on the loan&apos;s own page. The loan starts on the day you approve
+            it, so its due dates and reminders count from then. If a big loan takes a few days to send because of
+            the bank&apos;s daily transfer limit, approve it once the last transfer has gone out and attach every
+            transfer&apos;s screenshot.
           </p>
         )
       },
