@@ -284,8 +284,12 @@ export default function ConversationPage() {
         <div className="fixed inset-x-0 z-30 bg-paper border-t border-hairline" style={{ bottom: composerBottom }}>
           <div className="max-w-3xl mx-auto px-4 sm:px-5 py-3">
             {sendError && <p className="text-xs text-rust mb-2">{sendError}</p>}
-            <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
-            <div className="flex items-end gap-2">
+            {files.length > 0 && (
+              <div className="mb-2.5">
+                <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
+              </div>
+            )}
+            <div className="flex items-end gap-1.5">
               <AttachButton count={files.length} disabled={sending} onPick={addFiles} />
               <textarea
                 value={draft}
@@ -298,7 +302,7 @@ export default function ConversationPage() {
                 }}
                 maxLength={BODY_MAX}
                 rows={2}
-                placeholder={isAdmin ? "Reply as the admin team…" : "Write a message…"}
+                placeholder={files.length > 0 ? "Add a note (optional)" : isAdmin ? "Reply as the admin team…" : "Write a message…"}
                 className="flex-1 min-w-0 card px-3 py-2 text-sm text-ink placeholder:text-ink-soft outline-none resize-none"
               />
               <button

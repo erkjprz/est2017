@@ -11,6 +11,7 @@ import { SkeletonPanel } from "@/app/components/Skeleton"
 import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachments"
 import { readCache, writeCache } from "@/lib/cache"
 import {
+  ATTACHMENTS_MAX,
   BODY_MAX,
   SUBJECT_MAX,
   acceptChatFiles,
@@ -339,23 +340,39 @@ function ComposeSheet({
             className="w-full card px-3 py-2.5 text-sm text-ink placeholder:text-ink-soft outline-none"
           />
         </label>
-        <label className="block">
-          <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">Message</span>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            maxLength={BODY_MAX}
-            rows={5}
-            className="w-full card px-3 py-2.5 text-sm text-ink outline-none resize-none"
-          />
-        </label>
         <div>
-          <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
-          <div className="flex items-center gap-2.5">
-            <AttachButton count={files.length} disabled={sending} onPick={addFiles} />
-            <span className="text-sm text-ink-soft">
-              {files.length > 0 ? `${files.length} attached` : "Attach photos or files"}
-            </span>
+          <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">Message</span>
+          {/* Text, attachment previews and the attach control share one box,
+              so the files read as part of the message rather than a
+              separate field. */}
+          <div className="card overflow-hidden focus-within:border-gold">
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              maxLength={BODY_MAX}
+              rows={files.length > 0 ? 3 : 5}
+              aria-label="Message"
+              placeholder={files.length > 0 ? "Add a note (optional)" : "Write your message…"}
+              className="block w-full bg-transparent px-3 py-2.5 text-sm text-ink placeholder:text-ink-soft outline-none resize-none"
+            />
+            {files.length > 0 && (
+              <div className="px-3 pb-3">
+                <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-2 border-t border-hairline px-3 py-1">
+              <AttachButton
+                count={files.length}
+                disabled={sending}
+                onPick={addFiles}
+                label={files.length > 0 ? "Add more" : "Add photos or files"}
+              />
+              {files.length > 0 && (
+                <span className="text-[11px] text-ink-soft font-mono">
+                  {files.length}/{ATTACHMENTS_MAX}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         {error && <p className="text-sm text-rust">{error}</p>}
