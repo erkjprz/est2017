@@ -24,7 +24,8 @@ import {
 } from "@/app/components/TransactionFormUI"
 import { InterestRatePickerSheet } from "@/app/components/InterestRatePickerSheet"
 import { TermPickerSheet } from "@/app/components/TermPickerSheet"
-import { ReceiptThumb } from "@/app/components/admin/ReceiptThumb"
+import { ReceiptThumbs } from "@/app/components/admin/ReceiptThumb"
+import { receiptPaths, removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 import { approveLoanRelease } from "@/lib/approveLoan"
 import { approveBorrowerMember } from "@/lib/approveBorrower"
 import { dateOnly } from "@/lib/currentValue"
@@ -111,6 +112,7 @@ type QueueTxn = {
   amount: number
   loan_id: string | null
   receipt_url: string | null
+  receipt_urls?: string[] | null
   created_at: string
   resubmitted_at?: string | null
   previous_amount?: number | null
@@ -194,7 +196,7 @@ export default function AdminPage() {
   const [banks, setBanks] = useState<any[]>(cached?.banks ?? [])
   const [withdrawalBankSelections, setWithdrawalBankSelections] = useState<Record<string, string>>({})
   const [loanReleaseBankSelections, setLoanReleaseBankSelections] = useState<Record<string, string>>({})
-  const [approvalReceipts, setApprovalReceipts] = useState<Record<string, File>>({})
+  const [approvalReceipts, setApprovalReceipts] = useState<Record<string, File[]>>({})
   const [uploadingReceiptId, setUploadingReceiptId] = useState<string | null>(null)
   const [selectedBulkIds, setSelectedBulkIds] = useState<Set<string>>(new Set())
   const [bulkApproving, setBulkApproving] = useState(false)
@@ -211,7 +213,7 @@ export default function AdminPage() {
 
   const [loadError, setLoadError] = useState("")
   const [actionError, setActionError] = useState("")
-  const [openReceiptUrl, setOpenReceiptUrl] = useState<string | null>(null)
+  const [openReceipt, setOpenReceipt] = useState<{ paths: string[]; index: number } | null>(null)
 
   // Current bank balances, for the new-balance column on each approval
   // preview -- the preview already shows where every bank lands, so the
@@ -346,7 +348,7 @@ export default function AdminPage() {
     const isOut = FLOW[t.classification]?.tone === "out"
 
     if ((isIn && amount <= 0) || (isOut && amount >= 0)) flags.push({ label: "Wrong sign", tone: "warn" })
-    if (BULK_CLASSIFICATIONS.has(t.classification) && !t.receipt_url) flags.push({ label: "No receipt", tone: "warn" })
+    if (BULK_CLASSIFICATIONS.has(t.classification) && receiptPaths(t).length === 0) flags.push({ label: "No receipt", tone: "warn" })
 
     if (t.classification === "Member Withdrawal" && t.member_id && memberWithdrawable[t.member_id]) {
       const w = memberWithdrawable[t.member_id]
@@ -480,21 +482,13 @@ export default function AdminPage() {
   // attach proof of the actual outgoing transfer before either can be
   // approved, same storage bucket/naming convention member-side receipts
   // already use.
-  async function uploadApprovalReceipt(file: File, memberId: string | null): Promise<string | null> {
-    // This is only ever invoked from approveTransaction, itself only wired to
-    // a button's onClick -- never during render. react-hooks/purity's
-    // whole-component reachability analysis loses track of that once this
-    // file has enough closures in it (confirmed by bisection: unrelated JSX
-    // added elsewhere in this component tips it into flagging this call,
-    // with no change to this function or its call sites).
-    // eslint-disable-next-line react-hooks/purity
-    const fileName = `${memberId || "admin"}-${Date.now()}-${file.name}`
-    const { error } = await supabase.storage.from("Receipts").upload(fileName, file, { contentType: file.type })
+  async function uploadApprovalReceipts(files: File[], memberId: string | null): Promise<string[] | null> {
+    const { paths, error } = await uploadReceipts(files, memberId || "admin")
     if (error) {
-      setActionError(error.message)
+      setActionError(error)
       return null
     }
-    return fileName
+    return paths
   }
 
   // The bank a pending row will count toward once approved -- for a
@@ -528,24 +522,24 @@ export default function AdminPage() {
     setActionError("")
 
     // Tracked across both receipt-uploading branches below so the catch
-    // handler can clean up an orphaned upload if the write after it fails.
-    let uploadedReceiptUrl: string | null = null
+    // handler can clean up orphaned uploads if the write after them fails.
+    let uploadedReceipts: string[] = []
 
     try {
       if (txn.classification === "Member Withdrawal") {
         const bankAccountId = withdrawalBankSelections[transactionId]
-        const receiptFile = approvalReceipts[transactionId]
-        if (!bankAccountId || !receiptFile) return
+        const receiptFiles = approvalReceipts[transactionId] ?? []
+        if (!bankAccountId || receiptFiles.length === 0) return
 
         setUploadingReceiptId(transactionId)
-        const receiptUrl = await uploadApprovalReceipt(receiptFile, txn.member_id)
+        const paths = await uploadApprovalReceipts(receiptFiles, txn.member_id)
         setUploadingReceiptId(null)
-        if (!receiptUrl) return
-        uploadedReceiptUrl = receiptUrl
+        if (!paths) return
+        uploadedReceipts = paths
 
         const { error } = await supabase
           .from("transactions")
-          .update({ status: "approved", bank_account_id: bankAccountId, receipt_url: receiptUrl })
+          .update({ status: "approved", bank_account_id: bankAccountId, receipt_urls: paths })
           .eq("transaction_id", transactionId)
         if (error) throw error
       } else if (txn.classification === "Loan Release") {
@@ -556,19 +550,19 @@ export default function AdminPage() {
         // freezes each eligible member's pool share for this loan's hold,
         // all in one DB transaction.
         const bankAccountId = loanReleaseBankSelections[transactionId]
-        const receiptFile = approvalReceipts[transactionId]
-        if (!bankAccountId || !receiptFile || !txn.loan_id) return
+        const receiptFiles = approvalReceipts[transactionId] ?? []
+        if (!bankAccountId || receiptFiles.length === 0 || !txn.loan_id) return
 
         setUploadingReceiptId(transactionId)
-        const receiptUrl = await uploadApprovalReceipt(receiptFile, txn.member_id)
+        const paths = await uploadApprovalReceipts(receiptFiles, txn.member_id)
         setUploadingReceiptId(null)
-        if (!receiptUrl) return
-        uploadedReceiptUrl = receiptUrl
+        if (!paths) return
+        uploadedReceipts = paths
 
         await approveLoanRelease({
           loanId: txn.loan_id,
           bankAccountId,
-          receiptUrl,
+          receiptUrls: paths,
           releaseDate: dateOnly(new Date())
         })
       } else {
@@ -579,10 +573,10 @@ export default function AdminPage() {
         if (error) throw error
       }
     } catch (err) {
-      // The receipt already uploaded successfully above -- if the write it
-      // belongs to failed, clean it up rather than leaving it orphaned in
-      // the bucket.
-      if (uploadedReceiptUrl) await supabase.storage.from("Receipts").remove([uploadedReceiptUrl])
+      // The receipts already uploaded successfully above -- if the write
+      // they belong to failed, clean them up rather than leaving them
+      // orphaned in the bucket.
+      await removeReceipts(uploadedReceipts)
       setActionError(err instanceof Error ? err.message : "Something went wrong.")
       return
     }
@@ -1114,13 +1108,13 @@ export default function AdminPage() {
                         <div className="shrink-0 text-right">
                           <p className="text-sm font-mono">{Number(t.amount) < 0 ? "−" : ""}₱{fmt(Math.abs(t.amount))}</p>
                           <div className="flex items-center justify-end gap-2 mt-0.5">
-                            {t.receipt_url && (
+                            {receiptPaths(t).length > 0 && (
                               <button
                                 type="button"
-                                onClick={() => setOpenReceiptUrl(t.receipt_url)}
+                                onClick={() => setOpenReceipt({ paths: receiptPaths(t), index: 0 })}
                                 className="text-[11px] text-gold hover:underline"
                               >
-                                🧾 Receipt
+                                🧾 {receiptPaths(t).length > 1 ? `${receiptPaths(t).length} receipts` : "Receipt"}
                               </button>
                             )}
                             <button
@@ -1465,7 +1459,8 @@ export default function AdminPage() {
         const missingBank =
           (needsWithdrawalBank && !withdrawalBankSelections[t.transaction_id]) ||
           (needsLoanBank && !loanReleaseBankSelections[t.transaction_id])
-        const missingProof = needsAdminProof && !approvalReceipts[t.transaction_id]
+        const proofFiles = approvalReceipts[t.transaction_id] ?? []
+        const missingProof = needsAdminProof && proofFiles.length === 0
         const showMissing = approveTriedId === t.transaction_id
         const canApprove = !isDirty && !(isConfirmedMoney && bulkApproving) && uploadingReceiptId !== t.transaction_id
 
@@ -1711,7 +1706,7 @@ export default function AdminPage() {
                   {payoutQrPath && (
                     <button
                       type="button"
-                      onClick={() => setOpenReceiptUrl(payoutQrPath)}
+                      onClick={() => setOpenReceipt({ paths: [payoutQrPath], index: 0 })}
                       className="inline-flex items-center gap-1.5 text-xs font-mono text-gold border border-gold rounded-full px-3 py-1.5 hover:bg-gold/10 transition-colors"
                     >
                       View QR code
@@ -1763,25 +1758,50 @@ export default function AdminPage() {
                   </FieldRow>
                 )}
 
+                {proofFiles.map((file, i) => (
+                  <div key={`${file.name}-${file.lastModified}-${i}`} className="flex items-center gap-3 px-4 py-3">
+                    <span className="text-base shrink-0">📎</span>
+                    <span className="flex-1 min-w-0 text-sm text-ink truncate">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setApprovalReceipts((prev) => ({
+                          ...prev,
+                          [t.transaction_id]: (prev[t.transaction_id] ?? []).filter((_, j) => j !== i)
+                        }))
+                      }
+                      className="text-[12px] text-rust border border-rust rounded-full px-2.5 py-1 shrink-0"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+
                 <label
                   className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer ${
                     showMissing && missingProof ? invalidRowClass : ""
                   }`}
                 >
-                  <span className="text-base shrink-0">📎</span>
+                  <span className="text-base shrink-0">{proofFiles.length > 0 ? "＋" : "📎"}</span>
                   <span className="flex-1 min-w-0 text-sm text-ink-soft">
-                    <span className="block truncate">{approvalReceipts[t.transaction_id]?.name ?? "Proof of transfer"}</span>
+                    <span className="block truncate">{proofFiles.length > 0 ? "Add another file" : "Proof of transfer"}</span>
                     {showMissing && missingProof && <FieldError message="Attach proof of the transfer" className="mt-1" />}
                   </span>
                   <input
                     type="file"
                     accept="image/*,.pdf"
+                    multiple
                     className="hidden"
                     onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) {
-                        setApprovalReceipts((prev) => ({ ...prev, [t.transaction_id]: file }))
+                      const picked = Array.from(e.target.files ?? [])
+                      if (picked.length > 0) {
+                        setApprovalReceipts((prev) => ({
+                          ...prev,
+                          [t.transaction_id]: [...(prev[t.transaction_id] ?? []), ...picked]
+                        }))
                       }
+                      // Reset so picking the same file again still fires onChange.
+                      e.target.value = ""
                     }}
                   />
                 </label>
@@ -1790,7 +1810,7 @@ export default function AdminPage() {
             </div>
             )}
 
-            {(t.description || (!needsLoanBank && !needsWithdrawalBank) || t.receipt_url) && (
+            {(t.description || (!needsLoanBank && !needsWithdrawalBank) || receiptPaths(t).length > 0) && (
               <div className="mt-4 pt-4 border-t border-hairline space-y-2">
                 {t.description && <p className="text-sm text-ink-soft">{t.description}</p>}
                 {/* Withdrawal/Loan Release never have a bank on record yet at
@@ -1805,11 +1825,11 @@ export default function AdminPage() {
                     Bank: {t.bank_accounts?.account_name || t.bank_accounts?.bank_name || "None"}
                   </p>
                 )}
-                {t.receipt_url && (
-                  <ReceiptThumb
-                    path={t.receipt_url}
+                {receiptPaths(t).length > 0 && (
+                  <ReceiptThumbs
+                    paths={receiptPaths(t)}
                     label={isConfirmedMoney || t.classification === "Investment Return" ? "Member's receipt" : "Receipt"}
-                    onOpen={() => setOpenReceiptUrl(t.receipt_url)}
+                    onOpen={(index) => setOpenReceipt({ paths: receiptPaths(t), index })}
                   />
                 )}
               </div>
@@ -1955,7 +1975,9 @@ export default function AdminPage() {
 
       {showSearchFix && <SearchFixSheet onClose={() => setShowSearchFix(false)} />}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
-      {openReceiptUrl && <ReceiptModal path={openReceiptUrl} onClose={() => setOpenReceiptUrl(null)} />}
+      {openReceipt && (
+        <ReceiptModal paths={openReceipt.paths} startIndex={openReceipt.index} onClose={() => setOpenReceipt(null)} />
+      )}
     </>
   )
 }

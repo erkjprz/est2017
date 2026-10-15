@@ -5,7 +5,8 @@ import { useRouter, usePathname } from "next/navigation"
 import ReceiptModal from "@/app/components/ReceiptModal"
 import { Sheet } from "@/app/components/Sheet"
 import { ReviewRow } from "@/app/components/TransactionFormUI"
-import { ReceiptThumb } from "@/app/components/admin/ReceiptThumb"
+import { ReceiptThumbs } from "@/app/components/admin/ReceiptThumb"
+import { receiptPaths } from "@/lib/receiptUrl"
 import { formatInterestLabel, nextDueDate, paymentOverdueLabel } from "@/lib/loanFormat"
 import { TRANSACTION_TYPE_LABELS } from "@/lib/transactionLabels"
 import type { Loan, LoanTransaction } from "@/lib/useLoansSummary"
@@ -87,7 +88,7 @@ function nextPayment(loan: Loan): NextPayment | null {
 export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolean }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [openReceiptUrl, setOpenReceiptUrl] = useState<string | null>(null)
+  const [openReceipt, setOpenReceipt] = useState<{ paths: string[]; index: number } | null>(null)
   const [openTxn, setOpenTxn] = useState<LoanTransaction | null>(null)
 
   if (loans.length === 0) {
@@ -277,7 +278,7 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
           t={openTxn}
           editable={editable}
           onClose={() => setOpenTxn(null)}
-          onOpenReceipt={setOpenReceiptUrl}
+          onOpenReceipt={(paths, index) => setOpenReceipt({ paths, index })}
           onEdit={() => {
             const t = openTxn
             setOpenTxn(null)
@@ -289,7 +290,9 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
         />
       )}
 
-      {openReceiptUrl && <ReceiptModal path={openReceiptUrl} onClose={() => setOpenReceiptUrl(null)} />}
+      {openReceipt && (
+        <ReceiptModal paths={openReceipt.paths} startIndex={openReceipt.index} onClose={() => setOpenReceipt(null)} />
+      )}
     </>
   )
 }
@@ -309,9 +312,10 @@ function LoanTxnSheet({
   editable: boolean
   onClose: () => void
   onEdit: () => void
-  onOpenReceipt: (path: string) => void
+  onOpenReceipt: (paths: string[], index: number) => void
 }) {
   const isRepayment = t.classification === "Loan Repayment"
+  const receipts = receiptPaths(t)
   const canEdit = editable && isRepayment && (t.status === "pending" || t.status === "rejected")
   const statusLabel = t.status === "pending" ? "Waiting for approval" : t.status === "rejected" ? "Rejected" : "Approved"
 
@@ -351,9 +355,9 @@ function LoanTxnSheet({
         {t.description && <ReviewRow label="Notes" value={t.description} />}
       </div>
 
-      {t.receipt_url && (
+      {receipts.length > 0 && (
         <div className="mt-4">
-          <ReceiptThumb path={t.receipt_url} onOpen={() => onOpenReceipt(t.receipt_url!)} />
+          <ReceiptThumbs paths={receipts} onOpen={(i) => onOpenReceipt(receipts, i)} />
         </div>
       )}
     </Sheet>

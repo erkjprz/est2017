@@ -10,7 +10,7 @@ import {
   FlowBadge,
   StepTrack,
   ReviewRow,
-  ReceiptField,
+  ReceiptsField,
   FieldError,
   invalidRowClass,
   FieldGroup,
@@ -25,7 +25,7 @@ import {
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { getReceiptSignedUrl } from "@/lib/receiptUrl"
+import { receiptPaths, removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 import { LoanPickerSheet, LoanRowIcon } from "@/app/components/LoanPickerSheet"
 import { InvestmentPickerSheet, InvestmentRowIcon } from "@/app/components/InvestmentPickerSheet"
 import { InterestRatePickerSheet } from "@/app/components/InterestRatePickerSheet"
@@ -141,17 +141,17 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
   const [interestRateCustom, setInterestRateCustom] = useState(false)
   const [termCustom, setTermCustom] = useState(false)
   const [description, setDescription] = useState("")
-  const [existingReceiptUrl, setExistingReceiptUrl] = useState<string | null>(null)
-  const [existingReceiptSignedUrl, setExistingReceiptSignedUrl] = useState<string | null>(null)
+  // What the row had on load vs. what's still kept after the editor
+  // removes some -- the difference gets deleted from storage on save.
+  const [originalReceipts, setOriginalReceipts] = useState<string[]>([])
+  const [keptReceipts, setKeptReceipts] = useState<string[]>([])
   const [interestDistributed, setInterestDistributed] = useState(false)
   // Whether this row's investment has ever had a gain/loss distribution run
   // against it -- Investment/Investment Return have no per-transaction flag
   // the way Bank Interest does, since a distribution pools every approved
   // transaction under the investment rather than crediting off one row.
   const [investmentAlreadyDistributed, setInvestmentAlreadyDistributed] = useState(false)
-  const [receipt, setReceipt] = useState<File | null>(null)
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
-  const [dragActive, setDragActive] = useState(false)
+  const [receipts, setReceipts] = useState<File[]>([])
 
   const [saving, setSaving] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -162,19 +162,6 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
   // Loan Release is the one editable type with enough conditional fields
   // to earn its own Details -> Review sub-flow, matching NewTransactionSheet.
   const [formStep, setFormStep] = useState<1 | 2>(1)
-
-  useEffect(() => {
-    if (!existingReceiptUrl) return
-
-    let cancelled = false
-    getReceiptSignedUrl(existingReceiptUrl).then((signedUrl) => {
-      if (!cancelled) setExistingReceiptSignedUrl(signedUrl)
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [existingReceiptUrl])
 
   useEffect(() => {
     if (authLoading) return
@@ -196,7 +183,11 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
     async function load() {
       if (!member) return
 
-      const cachedTxn = getCachedTransactionRow(transactionId)
+      // A row rendered from data cached before receipt_urls existed would
+      // only know its first receipt -- saving it would drop the rest, so
+      // treat it as a cache miss and fetch it fresh.
+      const cachedRow = getCachedTransactionRow(transactionId)
+      const cachedTxn = cachedRow && Array.isArray(cachedRow.receipt_urls) ? cachedRow : null
       const cachedForm = getCachedTransactionFormData(member.member_id, isAdmin)
 
       let txn: any = cachedTxn
@@ -303,7 +294,8 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
       setInvestmentId(txn.investment_id ?? "")
       setIsMemberOwned(isMemberType)
       setDescription(txn.description ?? "")
-      setExistingReceiptUrl(txn.receipt_url ?? null)
+      setOriginalReceipts(receiptPaths(txn))
+      setKeptReceipts(receiptPaths(txn))
       setInterestDistributed(txn.interest_distributed === true)
       setFormStep(1)
 
@@ -433,11 +425,6 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
       ? previewTotalRepayable / Number(termMonths)
       : previewTotalRepayable
 
-  function setReceiptFile(file: File | null) {
-    setReceipt(file)
-    setReceiptPreview(file ? URL.createObjectURL(file) : null)
-  }
-
   const fmt = (n: number) =>
     Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -469,7 +456,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
     investment: !isLoanRelease && isInvestmentEntry && !investmentId,
     bank: !isLoanRelease && needsBank && !bankId,
     toBank: !isLoanRelease && isBankTransfer && !toBankId,
-    receipt: !isLoanRelease && needsReceipt && !receipt && !existingReceiptUrl,
+    receipt: !isLoanRelease && needsReceipt && receipts.length === 0 && keptReceipts.length === 0,
     interest: isLoanRelease && !(interestType === "rate" ? interestRate : interestAmount),
     term: isLoanRelease && !termMonths
   }
@@ -539,7 +526,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
         return
       }
 
-      if (needsReceipt && !receipt && !existingReceiptUrl) {
+      if (needsReceipt && receipts.length === 0 && keptReceipts.length === 0) {
         setMessage("Attach a receipt.")
         return
       }
@@ -618,23 +605,13 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
       return
     }
 
-    let receiptUrl = existingReceiptUrl
-
-    if (receipt) {
-      const fileName = `${member?.member_id}-${Date.now()}-${receipt.name}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("Receipts")
-        .upload(fileName, receipt, { contentType: receipt.type })
-
-      if (uploadError) {
-        setMessage(uploadError.message)
-        setSaving(false)
-        return
-      }
-
-      receiptUrl = fileName
+    const { paths: uploadedReceipts, error: receiptUploadError } = await uploadReceipts(receipts, member?.member_id ?? "")
+    if (receiptUploadError) {
+      setMessage(receiptUploadError)
+      setSaving(false)
+      return
     }
+    const nextReceipts = [...keptReceipts, ...uploadedReceipts]
 
     // Withdrawals, expenses, and Investment outflows are cash going out, so
     // the ledger stores them negative -- matches the sign convention
@@ -665,7 +642,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
         loan_id: isLoanPayment ? loanId : null,
         investment_id: isInvestmentEntry ? investmentId : null,
         description,
-        receipt_url: receiptUrl,
+        receipt_urls: nextReceipts,
         ...(isInvestmentEntry ? { affects_cash: selectedInvestment?.affects_cash ? 1 : 0 } : {}),
         // Saving a rejected row resubmits it -- flip it back to pending and
         // clear the stale reason so it re-enters the review queue clean.
@@ -683,32 +660,26 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
     setSaving(false)
 
     if (error) {
-      // The new receipt already uploaded successfully above -- if the
-      // update it belongs to failed, clean it up rather than leaving it
-      // orphaned in the bucket. The old file at existingReceiptUrl is
-      // untouched since the update never committed.
-      if (receipt && receiptUrl !== existingReceiptUrl) {
-        await supabase.storage.from("Receipts").remove([receiptUrl!])
-      }
+      // The new receipts already uploaded successfully above -- if the
+      // update they belong to failed, clean them up rather than leaving
+      // them orphaned in the bucket. The original files are untouched
+      // since the update never committed.
+      await removeReceipts(uploadedReceipts)
       setMessage(error.message)
       return
     }
 
     if (!txnRows || txnRows.length === 0) {
-      if (receipt && receiptUrl !== existingReceiptUrl) {
-        await supabase.storage.from("Receipts").remove([receiptUrl!])
-      }
+      await removeReceipts(uploadedReceipts)
       setMessage("This entry has changed since you opened it and can no longer be edited this way.")
       return
     }
 
-    // The update above already committed the new receipt_url, so the old
-    // file at existingReceiptUrl is now unreferenced -- clean it up rather
-    // than leaving it orphaned in the bucket. Best-effort: a failure here
-    // doesn't affect the save that already succeeded.
-    if (receipt && existingReceiptUrl && existingReceiptUrl !== receiptUrl) {
-      await supabase.storage.from("Receipts").remove([existingReceiptUrl])
-    }
+    // The update above already committed the new receipt list, so any
+    // original file the editor removed is now unreferenced -- clean it up
+    // rather than leaving it orphaned in the bucket. Best-effort: a failure
+    // here doesn't affect the save that already succeeded.
+    await removeReceipts(originalReceipts.filter((p) => !nextReceipts.includes(p)))
 
     notifyTransactionsChanged()
     onClose()
@@ -1012,14 +983,12 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
             {needsReceipt && (
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
-                <ReceiptField
-                  receipt={receipt}
-                  receiptPreview={receiptPreview}
-                  existingReceiptUrl={existingReceiptUrl}
-                  existingReceiptSignedUrl={existingReceiptSignedUrl}
-                  dragActive={dragActive}
-                  setDragActive={setDragActive}
-                  onFileChange={setReceiptFile}
+                <ReceiptsField
+                  files={receipts}
+                  onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}
+                  onRemoveFile={(i) => setReceipts((prev) => prev.filter((_, j) => j !== i))}
+                  existingPaths={keptReceipts}
+                  onRemoveExisting={(path) => setKeptReceipts((prev) => prev.filter((p) => p !== path))}
                   error={err("receipt", "Attach a receipt")}
                 />
               </div>

@@ -265,7 +265,8 @@ const memberSections: FaqSection[] = [
         a: (
           <p>
             So admins have proof of the transfer before approving it. A photo of the bank confirmation or
-            deposit slip is enough.
+            deposit slip is enough. If the transfer took more than one screenshot, attach them all —
+            you can add as many photos as you need.
           </p>
         )
       },

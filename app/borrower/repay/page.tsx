@@ -12,11 +12,12 @@ import {
   BankIcon,
   FieldRow,
   NoteIcon,
-  ReceiptField,
+  ReceiptsField,
   rowInputClass,
   rowSelectClass
 } from "@/app/components/TransactionFormUI"
 import { loanRemaining, startingAmount } from "@/lib/loanPayment"
+import { removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 
 function LoanIcon() {
   return (
@@ -54,9 +55,7 @@ export default function BorrowerRepayPage() {
   const [amountEdited, setAmountEdited] = useState(false)
   const [saveAsDefault, setSaveAsDefault] = useState(false)
   const [defaultSaveWarning, setDefaultSaveWarning] = useState("")
-  const [receipt, setReceipt] = useState<File | null>(null)
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
-  const [dragActive, setDragActive] = useState(false)
+  const [receipts, setReceipts] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState("")
   // Set when Submit is tapped with something missing -- see `missing`.
@@ -155,18 +154,13 @@ export default function BorrowerRepayPage() {
     load()
   }, [authLoading, member, router])
 
-  function setReceiptFile(file: File | null) {
-    setReceipt(file)
-    setReceiptPreview(file ? URL.createObjectURL(file) : null)
-  }
-
   // Nothing is marked up front; once Submit is tapped with gaps, every
   // missing field shows its own message and clears as soon as it's filled.
   const missing = {
     loan: !selectedLoanId,
     amount: !isValidPositiveNumber(amount),
     bank: !bankId,
-    receipt: !receipt
+    receipt: receipts.length === 0
   }
   const anyMissing = Object.values(missing).some(Boolean)
   const err = (key: keyof typeof missing, text: string) => (showErrors && missing[key] ? text : undefined)
@@ -196,21 +190,17 @@ export default function BorrowerRepayPage() {
       return
     }
 
-    if (!receipt) {
+    if (receipts.length === 0) {
       setMessage("Attach a receipt.")
       return
     }
 
     setSubmitting(true)
 
-    const fileName = `${member!.member_id}-${Date.now()}-${receipt.name}`
-
-    const { error: uploadError } = await supabase.storage
-      .from("Receipts")
-      .upload(fileName, receipt, { contentType: receipt.type })
+    const { paths: receiptPaths, error: uploadError } = await uploadReceipts(receipts, member!.member_id)
 
     if (uploadError) {
-      setMessage(uploadError.message)
+      setMessage(uploadError)
       setSubmitting(false)
       return
     }
@@ -222,16 +212,16 @@ export default function BorrowerRepayPage() {
       classification: "Loan Repayment",
       amount: Number(amount),
       description,
-      receipt_url: fileName,
+      receipt_urls: receiptPaths,
       status: "pending"
     })
 
     if (error) {
       setSubmitting(false)
-      // The receipt already uploaded successfully above -- if the insert it
-      // belongs to failed, clean it up rather than leaving it orphaned in
-      // the bucket.
-      await supabase.storage.from("Receipts").remove([fileName])
+      // The receipts already uploaded successfully above -- if the insert
+      // they belong to failed, clean them up rather than leaving them
+      // orphaned in the bucket.
+      await removeReceipts(receiptPaths)
       setMessage(error.message)
       return
     }
@@ -384,12 +374,10 @@ export default function BorrowerRepayPage() {
 
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
-                    <ReceiptField
-                      receipt={receipt}
-                      receiptPreview={receiptPreview}
-                      dragActive={dragActive}
-                      setDragActive={setDragActive}
-                      onFileChange={setReceiptFile}
+                    <ReceiptsField
+                      files={receipts}
+                      onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}
+                      onRemoveFile={(i) => setReceipts((prev) => prev.filter((_, j) => j !== i))}
                       error={err("receipt", "Attach a receipt")}
                     />
                   </div>

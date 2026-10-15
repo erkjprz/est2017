@@ -50,3 +50,29 @@ export function ReceiptThumb({ path, label = "Receipt", onOpen }: { path: string
     </button>
   )
 }
+
+// Every receipt on a transaction, one thumb each -- numbered when there's
+// more than one ("Receipt 1 of 3") so the full-size viewer's counter lines
+// up with what was tapped.
+export function ReceiptThumbs({
+  paths,
+  label = "Receipt",
+  onOpen
+}: {
+  paths: string[]
+  label?: string
+  onOpen: (index: number) => void
+}) {
+  return (
+    <div className="space-y-2">
+      {paths.map((path, i) => (
+        <ReceiptThumb
+          key={path}
+          path={path}
+          label={paths.length > 1 ? `${label} ${i + 1} of ${paths.length}` : label}
+          onOpen={() => onOpen(i)}
+        />
+      ))}
+    </div>
+  )
+}
