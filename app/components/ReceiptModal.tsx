@@ -3,16 +3,29 @@
 import { useEffect, useState } from "react"
 import { getReceiptSignedUrl } from "@/lib/receiptUrl"
 
+// Opens on paths[startIndex]; with more than one file (a transfer proved
+// by several screenshots), arrows and a counter step through the rest.
 export default function ReceiptModal({
-  path,
+  paths,
+  startIndex = 0,
   onClose
 }: {
-  path: string
+  paths: string[]
+  startIndex?: number
   onClose: () => void
 }) {
+  const [index, setIndex] = useState(startIndex)
+  const path = paths[index]
   const [url, setUrl] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
+
+  function go(delta: number) {
+    setIndex((i) => (i + delta + paths.length) % paths.length)
+    setUrl(null)
+    setLoaded(false)
+    setFailed(false)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -56,6 +69,7 @@ export default function ReceiptModal({
 
         {url && !failed && (
           <img
+            key={url}
             src={url}
             alt="Receipt"
             onLoad={() => setLoaded(true)}
@@ -75,7 +89,38 @@ export default function ReceiptModal({
         {failed && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-paper-2 text-ink-soft text-sm">
             <span className="text-2xl">🧾</span>
-            Couldn't load this receipt.
+            {/* A PDF proof can't render as an image -- offer it directly. */}
+            {url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer" className="text-gold underline">
+                Open this file
+              </a>
+            ) : (
+              "Couldn't load this receipt."
+            )}
+          </div>
+        )}
+
+        {paths.length > 1 && (
+          <div className="absolute bottom-3 inset-x-0 z-10 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              className="bg-ink text-paper w-8 h-8 rounded-full flex items-center justify-center text-lg leading-none"
+              onClick={() => go(-1)}
+              aria-label="Previous receipt"
+            >
+              ‹
+            </button>
+            <span className="bg-ink text-paper rounded-full px-3 py-1 text-[12px] font-mono">
+              {index + 1} / {paths.length}
+            </span>
+            <button
+              type="button"
+              className="bg-ink text-paper w-8 h-8 rounded-full flex items-center justify-center text-lg leading-none"
+              onClick={() => go(1)}
+              aria-label="Next receipt"
+            >
+              ›
+            </button>
           </div>
         )}
       </div>

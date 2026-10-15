@@ -4,7 +4,7 @@ import { computeCurrentValueByMember } from "@/lib/currentValue"
 interface ApproveLoanReleaseParams {
   loanId: string
   bankAccountId: string
-  receiptUrl: string
+  receiptUrls: string[]
   releaseDate: string
 }
 
@@ -43,13 +43,35 @@ export async function approveLoanRelease(params: ApproveLoanReleaseParams) {
         }))
       : []
 
+  // The RPC only takes one receipt, so the full list goes onto the still-
+  // pending row first. The RPC then sets receipt_url to that same first
+  // file, which the database's receipt sync treats as no change, keeping
+  // the whole list. A Loan Release carries no receipt until it's approved,
+  // so if the RPC fails the list is simply cleared again -- leaving the
+  // caller free to delete the uploaded files.
+  const { error: attachError } = await supabase
+    .from("transactions")
+    .update({ receipt_urls: params.receiptUrls })
+    .eq("loan_id", params.loanId)
+    .eq("classification", "Loan Release")
+    .eq("status", "pending")
+  if (attachError) throw new Error(attachError.message)
+
   const { error } = await supabase.rpc("approve_loan_release", {
     p_loan_id: params.loanId,
     p_bank_account_id: params.bankAccountId,
-    p_receipt_url: params.receiptUrl,
+    p_receipt_url: params.receiptUrls[0] ?? null,
     p_release_date: params.releaseDate,
     p_holds: holds
   })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    await supabase
+      .from("transactions")
+      .update({ receipt_urls: [] })
+      .eq("loan_id", params.loanId)
+      .eq("classification", "Loan Release")
+      .eq("status", "pending")
+    throw new Error(error.message)
+  }
 }

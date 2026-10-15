@@ -6,7 +6,8 @@
 // since the two key off different vocabularies (type keys vs
 // classification strings) -- only the rendering is shared here.
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { getReceiptSignedUrl } from "@/lib/receiptUrl"
 
 export function FlowBadge({
   arrow,
@@ -327,6 +328,160 @@ export function ReceiptField({
       {error && <FieldError message={error} className="px-1 mt-1.5" />}
     </>
   )
+}
+
+// Proof-of-transfer uploader for one or more files: already-saved receipts
+// (Edit) first, then newly-picked ones, each removable on its own, with an
+// "Add another photo" dropzone underneath. Picking several at once works
+// too. Used everywhere a receipt is attached; ReceiptField above stays for
+// the single-file payout QR.
+export function ReceiptsField({
+  files,
+  onAddFiles,
+  onRemoveFile,
+  existingPaths = [],
+  onRemoveExisting,
+  accept = "image/*",
+  emptyLabel = "Tap to upload a photo",
+  addLabel = "Add another photo",
+  error
+}: {
+  files: File[]
+  onAddFiles: (files: File[]) => void
+  onRemoveFile: (index: number) => void
+  existingPaths?: string[]
+  onRemoveExisting?: (path: string) => void
+  accept?: string
+  emptyLabel?: string
+  addLabel?: string
+  // Shown (with a red outline) once Submit has been tapped with no file.
+  error?: string
+}) {
+  const [dragActive, setDragActive] = useState(false)
+  const previews = useMemo(
+    () => files.map((f) => (f.type.startsWith("image/") ? URL.createObjectURL(f) : null)),
+    [files]
+  )
+  useEffect(
+    () => () => {
+      for (const p of previews) if (p) URL.revokeObjectURL(p)
+    },
+    [previews]
+  )
+
+  function pick(list: FileList | null | undefined) {
+    const picked = Array.from(list ?? [])
+    if (picked.length > 0) onAddFiles(picked)
+  }
+
+  const hasAny = existingPaths.length + files.length > 0
+
+  return (
+    <div className="space-y-2">
+      {existingPaths.map((path) => (
+        <div key={path} className="border border-hairline rounded-md p-3 flex items-center gap-3">
+          <SavedReceiptPreview path={path} />
+          <div className="min-w-0 flex-1">
+            <p className="text-base text-ink">Current receipt</p>
+            <p className="text-sm text-ink-soft">Already attached</p>
+          </div>
+          {onRemoveExisting && (
+            <button
+              type="button"
+              onClick={() => onRemoveExisting(path)}
+              className="text-sm text-rust border border-rust rounded-full px-2.5 py-1 shrink-0"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      ))}
+
+      {files.map((file, i) => (
+        <div key={`${file.name}-${file.lastModified}-${i}`} className="border border-hairline rounded-md p-3 flex items-center gap-3">
+          {previews[i] ? (
+            // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
+            <img src={previews[i]!} alt="Receipt preview" className="w-16 h-16 object-cover rounded-md border border-hairline shrink-0" />
+          ) : (
+            <span className="w-16 h-16 rounded-md border border-hairline bg-paper flex items-center justify-center text-2xl shrink-0">
+              📄
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-base text-ink truncate">{file.name}</p>
+            <p className="text-sm text-ink-soft">{(file.size / 1024).toFixed(0)} KB</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onRemoveFile(i)}
+            className="text-sm text-rust border border-rust rounded-full px-2.5 py-1 shrink-0"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+
+      <label
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragActive(true)
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragActive(false)
+          pick(e.dataTransfer.files)
+        }}
+        className={`flex items-center justify-center gap-2 border rounded-sm px-3 py-3 cursor-pointer text-center transition-colors ${
+          dragActive ? "border-dashed border-gold bg-gold/5" : error ? "border-rust" : "border-dashed border-hairline"
+        }`}
+      >
+        <span className="text-base shrink-0">{hasAny ? "＋" : "📎"}</span>
+        <span className="text-sm text-ink-soft">{hasAny ? addLabel : emptyLabel}</span>
+        <input
+          type="file"
+          accept={accept}
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            pick(e.target.files)
+            // Reset so picking the same file again still fires onChange.
+            e.target.value = ""
+          }}
+        />
+      </label>
+      {error && <FieldError message={error} className="px-1 mt-1.5" />}
+    </div>
+  )
+}
+
+function SavedReceiptPreview({ path }: { path: string }) {
+  const isPdf = path.toLowerCase().endsWith(".pdf")
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (isPdf) return
+    let cancelled = false
+    getReceiptSignedUrl(path).then((signed) => {
+      if (!cancelled) setUrl(signed)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [path, isPdf])
+
+  if (isPdf || !url) {
+    return (
+      <span
+        className={`w-16 h-16 rounded-md border border-hairline bg-paper flex items-center justify-center text-2xl shrink-0 ${
+          isPdf ? "" : "animate-pulse"
+        }`}
+      >
+        {isPdf ? "📄" : ""}
+      </span>
+    )
+  }
+  // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset
+  return <img src={url} alt="Current receipt" className="w-16 h-16 object-cover rounded-md border border-hairline shrink-0" />
 }
 
 // Groups a set of related fields into their own bordered card with a

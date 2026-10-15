@@ -14,6 +14,7 @@ import {
   StepTrack,
   ReviewRow,
   ReceiptField,
+  ReceiptsField,
   FieldError,
   invalidRowClass,
   FieldGroup,
@@ -31,6 +32,7 @@ import { fetchWithdrawable } from "@/lib/withdrawable"
 import { dateOnly } from "@/lib/currentValue"
 import { getCachedTransactionFormData, loadTransactionFormData } from "@/lib/transactionFormPrefetch"
 import { snapshotInvestmentHold } from "@/lib/snapshotHold"
+import { removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 import { fetchBankBalances, groupImpacts, txnImpact, type TxnImpact } from "@/lib/bankImpact"
 import { BankImpactPreview } from "@/app/components/BankImpact"
 import { startingAmount, type PayableLoan } from "@/lib/loanPayment"
@@ -116,9 +118,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   const [amount, setAmount] = useState(cached?.contributionDefault != null ? String(cached.contributionDefault) : "")
   const [txnDate, setTxnDate] = useState(() => dateOnly(new Date()))
   const [description, setDescription] = useState("")
-  const [receipt, setReceipt] = useState<File | null>(null)
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
-  const [dragActive, setDragActive] = useState(false)
+  const [receipts, setReceipts] = useState<File[]>([])
   // Loan Request only: where the admin should send the money -- typed
   // bank/e-wallet details, a photo of a payment QR code, or both. Same
   // section as the borrower's request page.
@@ -361,7 +361,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     toBank: isBankTransfer && !toBankId,
     loan: isLoanPayment && !selectedLoanId,
     investment: isInvestmentEntry && !investmentId,
-    receipt: needsReceipt && !receipt,
+    receipt: needsReceipt && receipts.length === 0,
     payout: needsPayout && !payoutDetails.trim() && !payoutQr,
     interest: isLoanRequest && !(interestType === "rate" ? interestRate : interestAmount),
     term: isLoanRequest && !termMonths,
@@ -442,11 +442,6 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
       ? totalRepayable(Number(amount), interestType, Number(interestRate || 0), Number(interestAmount || 0))
       : 0
 
-  function setReceiptFile(file: File | null) {
-    setReceipt(file)
-    setReceiptPreview(file ? URL.createObjectURL(file) : null)
-  }
-
   // Once they've added payout info, the "where do we send it" error no
   // longer applies -- clear it right away instead of on the next Continue.
   function clearMissingPayoutMessage() {
@@ -463,7 +458,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     setSelectedType(newType)
     setFormStep(1)
     setMessage("")
-    setReceiptFile(null)
+    setReceipts([])
     setBankId("")
     setToBankId("")
     setAmount("")
@@ -576,7 +571,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
       setMessage("Select a bank.")
       return
     }
-    if (needsReceipt && !receipt) {
+    if (needsReceipt && receipts.length === 0) {
       setMessage("Attach a receipt.")
       return
     }
@@ -615,18 +610,11 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
     setSubmitting(true)
 
-    let receiptUrl: string | null = null
-    if (receipt) {
-      const fileName = `${effectiveMemberId}-${Date.now()}-${receipt.name}`
-      const { error: uploadError } = await supabase.storage.from("Receipts").upload(fileName, receipt, {
-        contentType: receipt.type
-      })
-      if (uploadError) {
-        setMessage(uploadError.message)
-        setSubmitting(false)
-        return
-      }
-      receiptUrl = fileName
+    const { paths: receiptPaths, error: receiptUploadError } = await uploadReceipts(receipts, effectiveMemberId || "admin")
+    if (receiptUploadError) {
+      setMessage(receiptUploadError)
+      setSubmitting(false)
+      return
     }
 
     // Named "<member_id>-..." like receipts, so the Receipts bucket's
@@ -638,7 +626,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         .from("Receipts")
         .upload(qrPath, payoutQr, { contentType: payoutQr.type })
       if (uploadError) {
-        if (receiptUrl) await supabase.storage.from("Receipts").remove([receiptUrl])
+        await removeReceipts(receiptPaths)
         setMessage(uploadError.message)
         setSubmitting(false)
         return
@@ -692,7 +680,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         amount: Number(amount),
         txn_date: txnDate,
         description,
-        receipt_url: receiptUrl,
+        receipt_urls: receiptPaths,
         status,
         submitted_by: isAdmin ? memberId : null,
         affects_cash: selectedInvestment?.affects_cash ? 1 : 0
@@ -700,7 +688,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
       setSubmitting(false)
       if (error) {
-        if (receiptUrl) await supabase.storage.from("Receipts").remove([receiptUrl])
+        await removeReceipts(receiptPaths)
         setMessage(error.message)
         return
       }
@@ -720,14 +708,14 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         amount: Number(amount),
         txn_date: txnDate,
         description,
-        receipt_url: receiptUrl,
+        receipt_urls: receiptPaths,
         status: "approved",
         submitted_by: memberId
       })
 
       setSubmitting(false)
       if (error) {
-        if (receiptUrl) await supabase.storage.from("Receipts").remove([receiptUrl])
+        await removeReceipts(receiptPaths)
         setMessage(error.message)
         return
       }
@@ -756,7 +744,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         amount: isExpense || isInvestment ? -Number(amount) : Number(amount),
         txn_date: txnDate,
         description,
-        receipt_url: receiptUrl,
+        receipt_urls: receiptPaths,
         status: "approved",
         submitted_by: memberId,
         ...(isInvestment ? { affects_cash: selectedInvestment?.affects_cash ? 1 : 0 } : {})
@@ -764,7 +752,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
       if (error) {
         setSubmitting(false)
-        if (receiptUrl) await supabase.storage.from("Receipts").remove([receiptUrl])
+        await removeReceipts(receiptPaths)
         setMessage(error.message)
         return
       }
@@ -800,7 +788,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
       amount: selectedType === "withdrawal" ? -Number(amount) : Number(amount),
       txn_date: txnDate,
       description,
-      receipt_url: receiptUrl,
+      receipt_urls: receiptPaths,
       status,
       submitted_by: submittedByForOnBehalf,
       ...(isWithdrawal ? { payout_details: payoutDetails.trim() || null, payout_qr_path: qrPath } : {})
@@ -808,7 +796,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
 
     if (error) {
       setSubmitting(false)
-      if (receiptUrl) await supabase.storage.from("Receipts").remove([receiptUrl])
+      await removeReceipts(receiptPaths)
       if (qrPath) await supabase.storage.from("Receipts").remove([qrPath])
       setMessage(error.message)
       return
@@ -1169,12 +1157,10 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                 {needsReceipt && (
                   <div>
                     <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
-                    <ReceiptField
-                      receipt={receipt}
-                      receiptPreview={receiptPreview}
-                      dragActive={dragActive}
-                      setDragActive={setDragActive}
-                      onFileChange={setReceiptFile}
+                    <ReceiptsField
+                      files={receipts}
+                      onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}
+                      onRemoveFile={(i) => setReceipts((prev) => prev.filter((_, j) => j !== i))}
                       error={err("receipt", "Attach a receipt")}
                     />
                   </div>

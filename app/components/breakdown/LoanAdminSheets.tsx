@@ -10,9 +10,10 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { Sheet } from "@/app/components/Sheet"
 import { LoanTermsCard } from "@/app/components/LoanTermsCard"
-import { FieldRow, FieldError, BankIcon, NoteIcon, rowInputClass, rowSelectClass } from "@/app/components/TransactionFormUI"
+import { FieldRow, ReceiptsField, BankIcon, NoteIcon, rowInputClass, rowSelectClass } from "@/app/components/TransactionFormUI"
 import { closeLoanAndDistributeGain, previewLoanClose, type LoanCloseSharePreview } from "@/lib/closeLoan"
 import { approveLoanRelease } from "@/lib/approveLoan"
+import { removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 import { dateOnly } from "@/lib/currentValue"
 import type { InterestType } from "@/lib/loanMath"
 import { fetchBankBalances, groupImpacts, txnImpact } from "@/lib/bankImpact"
@@ -218,7 +219,7 @@ export function ReleaseLoanSheet({
   onReleased: () => void
 }) {
   const [bankChoice, setBankChoice] = useState("")
-  const [receipt, setReceipt] = useState<File | null>(null)
+  const [receipts, setReceipts] = useState<File[]>([])
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState("")
   // Approve stays tappable; tapping it with the bank or proof missing
@@ -235,24 +236,23 @@ export function ReleaseLoanSheet({
   const chosenBank = banks.find((b) => b.id === bankChoice)
 
   async function approve() {
-    if (!bankChoice || !receipt) {
+    if (!bankChoice || receipts.length === 0) {
       setShowErrors(true)
       return
     }
     setApproving(true)
     setError("")
 
-    // Declared outside the try block so the catch handler can clean it up
-    // regardless of which step below fails.
-    const fileName = `${adminLoan.member_id || "admin"}-${Date.now()}-${receipt.name}`
+    // Loan disbursement moves real money out -- requires proof of the
+    // actual outgoing transfer before the loan can be activated.
+    const { paths: receiptPaths, error: uploadError } = await uploadReceipts(receipts, adminLoan.member_id || "admin")
+    if (uploadError) {
+      setError(uploadError)
+      setApproving(false)
+      return
+    }
 
     try {
-      // Loan disbursement moves real money out -- requires proof of the
-      // actual outgoing transfer before the loan can be activated.
-      const { error: uploadError } = await supabase.storage
-        .from("Receipts")
-        .upload(fileName, receipt, { contentType: receipt.type })
-      if (uploadError) throw uploadError
 
       // Verifies a pending Loan Release exists, activates the loan, and
       // freezes each eligible member's pool share for its hold -- one
@@ -260,14 +260,13 @@ export function ReleaseLoanSheet({
       await approveLoanRelease({
         loanId: adminLoan.loan_id,
         bankAccountId: bankChoice,
-        receiptUrl: fileName,
+        receiptUrls: receiptPaths,
         releaseDate: dateOnly(new Date())
       })
     } catch (err) {
-      // If the upload itself failed there's nothing at fileName to remove
-      // (a no-op); if it succeeded but approveLoanRelease then failed, the
-      // file is now orphaned -- clean it up either way.
-      await supabase.storage.from("Receipts").remove([fileName])
+      // The files uploaded fine but approveLoanRelease failed, so they're
+      // now orphaned -- clean them up.
+      await removeReceipts(receiptPaths)
       setError(err instanceof Error ? err.message : "Something went wrong.")
       setApproving(false)
       return
@@ -330,40 +329,15 @@ export function ReleaseLoanSheet({
 
         <div>
           <p className={sectionLabelClass}>Proof of transfer</p>
-          {receipt ? (
-            <div className="card px-4 py-3 flex items-center gap-3">
-              <span className="text-base shrink-0">📎</span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-ink truncate">{receipt.name}</p>
-                <p className="text-[11px] text-ink-soft">{(receipt.size / 1024).toFixed(0)} KB</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setReceipt(null)}
-                className="text-[12px] text-rust border border-rust rounded-full px-2.5 py-1 shrink-0"
-              >
-                Remove
-              </button>
-            </div>
-          ) : (
-            <>
-              <label
-                className={`flex items-center justify-center gap-2 border rounded-md px-3 py-4 cursor-pointer text-center ${
-                  showErrors ? "border-rust" : "border-dashed border-hairline"
-                }`}
-              >
-                <span className="text-base shrink-0">📎</span>
-                <span className="text-sm text-ink-soft">Tap to upload a photo or PDF</span>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={(e) => setReceipt(e.target.files?.[0] ?? null)}
-                />
-              </label>
-              {showErrors && <FieldError message="Attach proof of the transfer" className="px-1 mt-1.5" />}
-            </>
-          )}
+          <ReceiptsField
+            files={receipts}
+            onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}
+            onRemoveFile={(i) => setReceipts((prev) => prev.filter((_, j) => j !== i))}
+            accept="image/*,.pdf"
+            emptyLabel="Tap to upload a photo or PDF"
+            addLabel="Add another file"
+            error={showErrors && receipts.length === 0 ? "Attach proof of the transfer" : undefined}
+          />
         </div>
       </div>
     </Sheet>

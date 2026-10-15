@@ -17,11 +17,11 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { getReceiptSignedUrl } from "@/lib/receiptUrl"
+import { receiptPaths, removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 import {
   FlowBadge,
   FieldRow,
-  ReceiptField,
+  ReceiptsField,
   DateField,
   BankIcon,
   NoteIcon,
@@ -332,24 +332,14 @@ function SupportEditForm({
   const [txnDate, setTxnDate] = useState(t.txn_date ?? "")
   const [status, setStatus] = useState(t.status)
   const [rejectionReason, setRejectionReason] = useState(t.rejection_reason ?? "")
-  const [receipt, setReceipt] = useState<File | null>(null)
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
-  const [dragActive, setDragActive] = useState(false)
-  const [existingReceiptSignedUrl, setExistingReceiptSignedUrl] = useState<string | null>(null)
+  const [receipts, setReceipts] = useState<File[]>([])
+  // The row's current files, minus any the admin removes here -- the
+  // removed ones get deleted from storage once the save commits.
+  const originalReceipts = receiptPaths(t)
+  const [keptReceipts, setKeptReceipts] = useState<string[]>(originalReceipts)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState("")
 
-  useEffect(() => {
-    if (t.receipt_url) {
-      getReceiptSignedUrl(t.receipt_url).then(setExistingReceiptSignedUrl)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function setReceiptFile(file: File | null) {
-    setReceipt(file)
-    setReceiptPreview(file ? URL.createObjectURL(file) : null)
-  }
 
   async function save() {
     const amountNum = Number(amount)
@@ -368,7 +358,7 @@ function SupportEditForm({
     // proof of a transfer that hasn't happened.
     const isMoneyOut =
       t.status === "approved" && (t.classification === "Member Withdrawal" || t.classification === "Loan Release")
-    if (isMoneyOut && amountNum !== Number(t.amount) && !receipt) {
+    if (isMoneyOut && amountNum !== Number(t.amount) && receipts.length === 0) {
       setMessage("Amount changed for a withdrawal/loan disbursement -- attach an updated receipt before saving.")
       return
     }
@@ -408,20 +398,13 @@ function SupportEditForm({
     setSaving(true)
     setMessage("")
 
-    let receiptUrl = t.receipt_url ?? null
-    if (receipt) {
-      const fileName = `${t.transaction_id}-${Date.now()}-${receipt.name}`
-      const { error: uploadError } = await supabase.storage
-        .from("Receipts")
-        .upload(fileName, receipt, { contentType: receipt.type })
-
-      if (uploadError) {
-        setSaving(false)
-        setMessage(uploadError.message)
-        return
-      }
-      receiptUrl = fileName
+    const { paths: uploadedReceipts, error: uploadError } = await uploadReceipts(receipts, t.transaction_id)
+    if (uploadError) {
+      setSaving(false)
+      setMessage(uploadError)
+      return
     }
+    const nextReceipts = [...keptReceipts, ...uploadedReceipts]
 
     const updates: Record<string, unknown> = {
       amount: amountNum,
@@ -437,7 +420,7 @@ function SupportEditForm({
       // moves elsewhere, same as the normal Reject button never leaving a
       // stale reason behind on a transaction that's since been approved.
       rejection_reason: status === "rejected" ? rejectionReason.trim() || null : null,
-      receipt_url: receiptUrl
+      receipt_urls: nextReceipts
     }
     if (isUnapprovedLoanRelease) updates.loan_id = null
 
@@ -458,24 +441,20 @@ function SupportEditForm({
 
     if (error) {
       setSaving(false)
-      // The new receipt already uploaded successfully above -- if the
-      // update it belongs to failed, clean it up rather than leaving it
-      // orphaned in the bucket. The old file at t.receipt_url is untouched
+      // The new receipts already uploaded successfully above -- if the
+      // update they belong to failed, clean them up rather than leaving
+      // them orphaned in the bucket. The original files are untouched
       // since the update never committed.
-      if (receipt && receiptUrl !== t.receipt_url) {
-        await supabase.storage.from("Receipts").remove([receiptUrl!])
-      }
+      await removeReceipts(uploadedReceipts)
       setMessage(error.message)
       return
     }
 
-    // The update above already committed the new receipt_url, so the old
-    // file at t.receipt_url is now unreferenced -- clean it up rather than
-    // leaving it orphaned in the bucket. Best-effort: a failure here doesn't
-    // affect the save that already succeeded.
-    if (receipt && t.receipt_url && t.receipt_url !== receiptUrl) {
-      await supabase.storage.from("Receipts").remove([t.receipt_url])
-    }
+    // The update above already committed the new receipt list, so any
+    // original file removed here is now unreferenced -- clean it up rather
+    // than leaving it orphaned in the bucket. Best-effort: a failure here
+    // doesn't affect the save that already succeeded.
+    await removeReceipts(originalReceipts.filter((p) => !nextReceipts.includes(p)))
 
     if (isUnapprovedLoanRelease) {
       const { error: loanError } = await supabase.from("loans").delete().eq("loan_id", t.loan_id)
@@ -636,14 +615,12 @@ function SupportEditForm({
 
       <div className="mt-4">
         <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
-        <ReceiptField
-          receipt={receipt}
-          receiptPreview={receiptPreview}
-          existingReceiptUrl={t.receipt_url}
-          existingReceiptSignedUrl={existingReceiptSignedUrl}
-          dragActive={dragActive}
-          setDragActive={setDragActive}
-          onFileChange={setReceiptFile}
+        <ReceiptsField
+          files={receipts}
+          onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}
+          onRemoveFile={(i) => setReceipts((prev) => prev.filter((_, j) => j !== i))}
+          existingPaths={keptReceipts}
+          onRemoveExisting={(path) => setKeptReceipts((prev) => prev.filter((p) => p !== path))}
         />
       </div>
     </Sheet>

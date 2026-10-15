@@ -234,7 +234,7 @@ function TransactionsPageInner() {
   // on every keystroke.
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
   const [loadError, setLoadError] = useState("")
-  const [openReceiptUrl, setOpenReceiptUrl] = useState<string | null>(null)
+  const [openReceipt, setOpenReceipt] = useState<{ paths: string[]; index: number } | null>(null)
 
   // The actual queries live in lib/transactionsSnapshot.ts, shared with the
   // splash at / -- which runs the exact same fetch to get this cache warm
@@ -792,7 +792,7 @@ function TransactionsPageInner() {
           memberId={member?.member_id}
           isAdmin={isAdmin}
           onClose={() => setOpenTxnId(null)}
-          onOpenReceipt={setOpenReceiptUrl}
+          onOpenReceipt={(paths, index) => setOpenReceipt({ paths, index })}
           onEdit={() => {
             setOpenTxnId(null)
             // Hands the exact row already on screen to EditTransactionSheet,
@@ -802,7 +802,9 @@ function TransactionsPageInner() {
           }}
         />
       )}
-      {openReceiptUrl && <ReceiptModal path={openReceiptUrl} onClose={() => setOpenReceiptUrl(null)} />}
+      {openReceipt && (
+        <ReceiptModal paths={openReceipt.paths} startIndex={openReceipt.index} onClose={() => setOpenReceipt(null)} />
+      )}
     </>
   )
 }

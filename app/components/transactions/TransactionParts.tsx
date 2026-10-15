@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation"
 import { Sheet } from "@/app/components/Sheet"
 import { ReviewRow } from "@/app/components/TransactionFormUI"
-import { ReceiptThumb } from "@/app/components/admin/ReceiptThumb"
+import { ReceiptThumbs } from "@/app/components/admin/ReceiptThumb"
+import { receiptPaths } from "@/lib/receiptUrl"
 import { AdminActionRow } from "@/app/components/breakdown/AdminMenu"
 import { TRANSACTION_TYPE_LABELS as typeLabels } from "@/lib/transactionLabels"
 import { bankAccountLabel } from "@/lib/transactionsSnapshot"
@@ -245,7 +246,7 @@ export function TransactionRow({ t, onOpen }: { t: Txn; onOpen: () => void }) {
           {v.transferLabel && ` · ${v.transferLabel}`}
         </span>
         <span className="flex items-center gap-1.5 shrink-0 text-ink-soft">
-          {t.receipt_url && <PaperclipIcon />}
+          {receiptPaths(t).length > 0 && <PaperclipIcon />}
           <StatusTag status={t.status} />
         </span>
       </span>
@@ -277,10 +278,11 @@ export function TransactionDetailSheet({
   isAdmin: boolean
   onClose: () => void
   onEdit: () => void
-  onOpenReceipt: (path: string) => void
+  onOpenReceipt: (paths: string[], index: number) => void
 }) {
   const router = useRouter()
   const v = describeTransaction(t)
+  const receipts = receiptPaths(t)
   const canEdit = canEditTransaction(t, memberId, isAdmin)
   const isTransfer = t.classification === "Internal Transfer"
   const bankKey = !isTransfer ? ledgerBankKeys(t)[0] ?? null : null
@@ -352,9 +354,9 @@ export function TransactionDetailSheet({
         {v.description && <ReviewRow label="Notes" value={v.description} />}
       </div>
 
-      {t.receipt_url && (
+      {receipts.length > 0 && (
         <div className="mt-4">
-          <ReceiptThumb path={t.receipt_url} onOpen={() => onOpenReceipt(t.receipt_url)} />
+          <ReceiptThumbs paths={receipts} onOpen={(i) => onOpenReceipt(receipts, i)} />
         </div>
       )}
 
