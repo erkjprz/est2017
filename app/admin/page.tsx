@@ -1195,41 +1195,54 @@ export default function AdminPage() {
                   ))}
                 </div>
 
-                {bulkTransactions.length > 1 && selectedBulkIds.size > 0 && (
-                  <div
-                    className="sticky z-10 mt-3 bg-ink text-paper rounded-md px-4 py-3 shadow-lg"
-                    // Above the bottom dock -- at bottom-4 it stuck *under* the
-                    // dock once the queue was long enough to scroll.
-                    style={{ bottom: "calc(var(--dock-h) + 0.75rem)" }}
-                  >
-                    <BankImpactPreview
-                      {...groupImpacts(
-                        bulkTransactions.filter((t) => selectedBulkIds.has(t.transaction_id)).map(impactFor)
-                      )}
-                      balances={bankBalances}
-                      compact
-                      className="mb-2.5 pb-2.5 border-b border-paper/20"
-                    />
-                    <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-mono">{selectedBulkIds.size} selected</span>
-                    <div className="flex gap-2">
-                      <button
-                        className="border border-paper/30 text-paper px-3 py-2 rounded-md text-sm"
-                        onClick={() => setSelectedBulkIds(new Set())}
-                      >
-                        Clear
-                      </button>
-                      <button
-                        className="bg-paper text-ink px-4 py-2 rounded-md text-sm font-semibold disabled:opacity-50"
-                        onClick={approveBulkSelected}
-                        disabled={bulkApproving}
-                      >
-                        {bulkApproving ? "Approving..." : `Approve ${selectedBulkIds.size}`}
-                      </button>
+                {bulkTransactions.length > 1 && selectedBulkIds.size > 0 && (() => {
+                  const selected = bulkTransactions.filter((t) => selectedBulkIds.has(t.transaction_id))
+                  const selectedTotal = selected.reduce((sum, t) => sum + Number(t.amount), 0)
+                  return (
+                    <div
+                      // Theme card rather than an inverted block -- in dark
+                      // mode bg-ink turned it into a bright white slab.
+                      className="sticky z-10 mt-3 bg-paper-2 border border-hairline rounded-2xl px-4 py-3.5 shadow-[0_-8px_30px_rgba(0,0,0,0.25)]"
+                      // Above the bottom dock -- at bottom-4 it stuck *under* the
+                      // dock once the queue was long enough to scroll.
+                      style={{ bottom: "calc(var(--dock-h) + 0.75rem)" }}
+                    >
+                      <BankImpactPreview
+                        {...groupImpacts(selected.map(impactFor))}
+                        balances={bankBalances}
+                        compact
+                        className="mb-3 pb-3 border-b border-hairline"
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0">
+                          <span className="block text-xs text-ink-soft">{selectedBulkIds.size} selected</span>
+                          <span
+                            className={`block font-mono [font-variant-numeric:tabular-nums] text-[15px] ${
+                              selectedTotal < 0 ? "text-rust" : "text-sage"
+                            }`}
+                          >
+                            {selectedTotal < 0 ? "−" : "+"}₱{fmt(Math.abs(selectedTotal))}
+                          </span>
+                        </span>
+                        <div className="flex gap-2 shrink-0">
+                          <button
+                            className="border border-hairline text-ink px-4 py-2.5 rounded-full text-sm whitespace-nowrap"
+                            onClick={() => setSelectedBulkIds(new Set())}
+                          >
+                            Clear
+                          </button>
+                          <button
+                            className="bg-ink text-paper px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap disabled:opacity-50"
+                            onClick={approveBulkSelected}
+                            disabled={bulkApproving}
+                          >
+                            {bulkApproving ? "Approving..." : `Approve ${selectedBulkIds.size}`}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    </div>
-                  </div>
-                )}
+                  )
+                })()}
 
               </section>
             )}
