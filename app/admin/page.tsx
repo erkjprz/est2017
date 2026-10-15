@@ -38,7 +38,8 @@ import {
   type ImpactTxn,
   type TxnImpact
 } from "@/lib/bankImpact"
-import { ApprovalResultCard, BankImpactPreview, type ApprovalResult } from "@/app/components/BankImpact"
+import { BankImpactPreview } from "@/app/components/BankImpact"
+import { Toast } from "@/app/components/Toast"
 import { MessagesButton } from "@/app/components/admin/MessagesButton"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 
@@ -212,19 +213,11 @@ export default function AdminPage() {
   const [actionError, setActionError] = useState("")
   const [openReceiptUrl, setOpenReceiptUrl] = useState<string | null>(null)
 
-  // Current bank balances, for the before → after line on each approval,
-  // and the confirmation shown once an approval goes through -- so an admin
-  // doesn't have to check the Banks page by hand afterwards.
+  // Current bank balances, for the new-balance column on each approval
+  // preview -- the preview already shows where every bank lands, so the
+  // confirmation afterwards is just a short toast.
   const [bankBalances, setBankBalances] = useState<Record<string, number> | null>(null)
-  const [lastApproval, setLastApproval] = useState<ApprovalResult | null>(null)
-  // The confirmation clears itself after a while so it doesn't pile up over
-  // a session -- unless the admin touches it, which keeps it until dismissed.
-  const [approvalPinned, setApprovalPinned] = useState(false)
-  useEffect(() => {
-    if (!lastApproval || approvalPinned) return
-    const timer = setTimeout(() => setLastApproval(null), 10000)
-    return () => clearTimeout(timer)
-  }, [lastApproval, approvalPinned])
+  const [toast, setToast] = useState<string | null>(null)
 
   // Context loaded alongside the queue so each card can say what the
   // admin would otherwise have to look up: the member's available balance
@@ -518,25 +511,14 @@ export default function AdminPage() {
     return txnImpact(t, chosen)
   }
 
-  // Re-fetches balances after the write, so the confirmation shows where
-  // each bank actually landed rather than the pre-approval prediction.
-  async function showApprovalResult(ids: string[], impacts: TxnImpact[]) {
+  // Confirms with a toast and refreshes balances so the next preview starts
+  // from where the banks actually are now.
+  function showApprovalResult(ids: string[]) {
     rememberApproved(ids)
-    const { banks: deltas, unaffected } = groupImpacts(impacts)
-    let fresh: Record<string, number> | null = null
-    try {
-      fresh = await fetchBankBalances()
-      setBankBalances(fresh)
-    } catch {
-      fresh = null
-    }
-    setApprovalPinned(false)
-    setLastApproval({
-      count: ids.length,
-      unaffected,
-      banks: deltas.map((d) => ({ ...d, after: fresh ? fresh[d.bank] ?? 0 : null }))
-    })
-    window.scrollTo({ top: 0, behavior: "smooth" })
+    setToast(`Approved ${ids.length} transaction${ids.length === 1 ? "" : "s"}`)
+    fetchBankBalances()
+      .then(setBankBalances)
+      .catch(() => {})
   }
 
   async function approveTransaction(transactionId: string) {
@@ -544,7 +526,6 @@ export default function AdminPage() {
     if (!txn) return
 
     setActionError("")
-    const impact = impactFor(txn)
 
     // Tracked across both receipt-uploading branches below so the catch
     // handler can clean up an orphaned upload if the write after it fails.
@@ -612,7 +593,7 @@ export default function AdminPage() {
       return next
     })
     loadData()
-    showApprovalResult([transactionId], [impact])
+    showApprovalResult([transactionId])
   }
 
   async function rejectTransaction(transactionId: string, reason: string) {
@@ -667,6 +648,8 @@ export default function AdminPage() {
 
     setRejectingId(null)
     setRejectReason("")
+    setReviewingTxnId(null)
+    setToast("Transaction rejected")
     loadData()
   }
 
@@ -724,11 +707,10 @@ export default function AdminPage() {
 
     // Only what actually got approved counts toward the confirmation.
     const approvedIds = (data ?? []).map((r) => r.transaction_id as string)
-    const approvedTxns = pendingTransactions.filter((t) => approvedIds.includes(t.transaction_id))
 
     setSelectedBulkIds(new Set())
     loadData()
-    if (approvedIds.length > 0) showApprovalResult(approvedIds, approvedTxns.map(impactFor))
+    if (approvedIds.length > 0) showApprovalResult(approvedIds)
   }
 
   async function approveBulkSelected() {
@@ -1028,15 +1010,6 @@ export default function AdminPage() {
 
           {actionError && <p className="mt-4 text-sm text-rust">{actionError}</p>}
 
-          {lastApproval && (
-            <div className="mt-4" onPointerDown={() => setApprovalPinned(true)}>
-              <ApprovalResultCard
-                result={lastApproval}
-                onViewBank={(bank) => router.push(`/fund-breakdown?tab=banks&bank=${encodeURIComponent(bank)}`)}
-                onDismiss={() => setLastApproval(null)}
-              />
-            </div>
-          )}
 
           {/* Filter chips -- narrow which groups show below, replacing the
               old two-tier tab system. Single-select, matching the pill
@@ -1981,6 +1954,7 @@ export default function AdminPage() {
       )}
 
       {showSearchFix && <SearchFixSheet onClose={() => setShowSearchFix(false)} />}
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
       {openReceiptUrl && <ReceiptModal path={openReceiptUrl} onClose={() => setOpenReceiptUrl(null)} />}
     </>
   )
