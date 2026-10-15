@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { formatFileSize, getChatAttachmentUrl, type ChatAttachment } from "@/lib/conversations"
+import { ATTACHMENTS_MAX, formatFileSize, getChatAttachmentUrl, type ChatAttachment } from "@/lib/conversations"
 
 // Attachments inside a chat bubble: photos as thumbnails (tap for full
 // size), anything else as a file chip that downloads it.
@@ -152,5 +152,45 @@ export function PendingAttachments({ files, onRemove }: { files: File[]; onRemov
         </div>
       ))}
     </div>
+  )
+}
+
+const ACCEPT = "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+
+// The paperclip that opens the file picker. Disabled while sending or once
+// the per-message cap is reached.
+export function AttachButton({
+  count,
+  disabled,
+  onPick,
+  className = "w-10 h-10"
+}: {
+  count: number
+  disabled?: boolean
+  onPick: (files: File[]) => void
+  className?: string
+}) {
+  const off = disabled || count >= ATTACHMENTS_MAX
+  return (
+    <label
+      className={`shrink-0 border border-hairline rounded-md flex items-center justify-center text-lg ${className} ${
+        off ? "opacity-50 pointer-events-none" : "cursor-pointer"
+      }`}
+      aria-label="Attach photos or files"
+      title="Attach photos or files"
+    >
+      📎
+      <input
+        type="file"
+        multiple
+        accept={ACCEPT}
+        className="hidden"
+        onChange={(e) => {
+          onPick(Array.from(e.target.files ?? []))
+          // Reset so picking the same file again still fires onChange.
+          e.target.value = ""
+        }}
+      />
+    </label>
   )
 }
