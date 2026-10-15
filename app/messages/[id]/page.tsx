@@ -7,11 +7,16 @@ import Navbar from "@/app/components/Navbar"
 import BorrowerHeader from "@/app/components/BorrowerHeader"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
+import { AttachButton, MessageAttachments, PendingAttachments } from "@/app/components/ChatAttachments"
 import {
   BODY_MAX,
+  MESSAGE_COLUMNS,
+  acceptChatFiles,
   formatMessageTime,
   markConversationRead,
+  removeChatAttachments,
   setConversationStatus,
+  uploadChatAttachments,
   type ConversationMessage
 } from "@/lib/conversations"
 
@@ -40,6 +45,7 @@ export default function ConversationPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [draft, setDraft] = useState("")
+  const [files, setFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState("")
   const [statusBusy, setStatusBusy] = useState(false)
@@ -68,7 +74,7 @@ export default function ConversationPage() {
           .maybeSingle(),
         supabase
           .from("conversation_messages")
-          .select("id, conversation_id, sender_id, body, created_at")
+          .select(MESSAGE_COLUMNS)
           .eq("conversation_id", conversationId)
           .order("created_at", { ascending: true })
       ])
@@ -101,7 +107,8 @@ export default function ConversationPage() {
           filter: `conversation_id=eq.${conversationId}`
         },
         (payload) => {
-          const msg = payload.new as ConversationMessage
+          const msg = { ...(payload.new as ConversationMessage) }
+          msg.attachments = msg.attachments ?? []
           setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
           if (msg.sender_id !== member!.member_id) markConversationRead(conversationId)
         }
@@ -140,22 +147,38 @@ export default function ConversationPage() {
     bottomRef.current?.scrollIntoView({ block: "end" })
   }, [messages.length])
 
+  function addFiles(picked: File[]) {
+    const { accepted, error } = acceptChatFiles(files, picked)
+    setSendError(error)
+    if (accepted.length > 0) setFiles((prev) => [...prev, ...accepted])
+  }
+
   async function send() {
     const body = draft.trim()
-    if (!body || sending || !member) return
+    if ((!body && files.length === 0) || sending || !member) return
     setSending(true)
     setSendError("")
+
+    const { attachments, error: uploadError } = await uploadChatAttachments(conversationId, member.member_id, files)
+    if (uploadError) {
+      setSending(false)
+      setSendError(`Couldn't upload: ${uploadError}`)
+      return
+    }
+
     const { data, error } = await supabase
       .from("conversation_messages")
-      .insert({ conversation_id: conversationId, sender_id: member.member_id, body })
-      .select("id, conversation_id, sender_id, body, created_at")
+      .insert({ conversation_id: conversationId, sender_id: member.member_id, body, attachments })
+      .select(MESSAGE_COLUMNS)
       .single()
     setSending(false)
     if (error) {
+      await removeChatAttachments(attachments.map((a) => a.path))
       setSendError(error.message)
       return
     }
     setDraft("")
+    setFiles([])
     setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]))
     // A new message reopens a closed thread server-side; mirror it here.
     setConversation((c) => (c ? { ...c, status: "open" } : c))
@@ -241,7 +264,8 @@ export default function ConversationPage() {
                           mine ? "bg-gold-soft text-ink" : "bg-paper-2 border border-hairline text-ink"
                         }`}
                       >
-                        {m.body}
+                        {m.attachments?.length > 0 && <MessageAttachments attachments={m.attachments} />}
+                        {m.body && <div className={m.attachments?.length > 0 ? "mt-2" : ""}>{m.body}</div>}
                       </div>
                       <span className="text-[11px] text-ink-soft font-mono mt-1 px-1">
                         {label} · {formatMessageTime(m.created_at)}
@@ -260,7 +284,9 @@ export default function ConversationPage() {
         <div className="fixed inset-x-0 z-30 bg-paper border-t border-hairline" style={{ bottom: composerBottom }}>
           <div className="max-w-3xl mx-auto px-4 sm:px-5 py-3">
             {sendError && <p className="text-xs text-rust mb-2">{sendError}</p>}
+            <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
             <div className="flex items-end gap-2">
+              <AttachButton count={files.length} disabled={sending} onPick={addFiles} />
               <textarea
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -277,7 +303,7 @@ export default function ConversationPage() {
               />
               <button
                 onClick={send}
-                disabled={sending || !draft.trim()}
+                disabled={sending || (!draft.trim() && files.length === 0)}
                 className="shrink-0 bg-ink text-paper px-4 py-2.5 rounded-md text-sm font-semibold disabled:opacity-50"
               >
                 {sending ? "..." : "Send"}

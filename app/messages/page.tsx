@@ -8,13 +8,15 @@ import BorrowerHeader from "@/app/components/BorrowerHeader"
 import { Sheet } from "@/app/components/Sheet"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
+import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachments"
 import { readCache, writeCache } from "@/lib/cache"
 import {
   BODY_MAX,
   SUBJECT_MAX,
+  acceptChatFiles,
   formatMessageTime,
   listConversations,
-  startConversation,
+  startConversationWithAttachments,
   type ConversationSummary
 } from "@/lib/conversations"
 
@@ -256,6 +258,7 @@ function ComposeSheet({
   const [recipientId, setRecipientId] = useState(preselectedMemberId ?? "")
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
+  const [files, setFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
 
@@ -271,19 +274,25 @@ function ComposeSheet({
   }, [isAdmin, selfId])
 
   const targetId = isAdmin ? recipientId : selfId
-  const canSend = !!targetId && subject.trim().length > 0 && body.trim().length > 0 && !sending
+  const canSend = !!targetId && subject.trim().length > 0 && (body.trim().length > 0 || files.length > 0) && !sending
 
   async function send() {
     if (!canSend) return
     setSending(true)
     setError("")
-    const { data, error } = await startConversation(targetId, subject, body)
+    const { data, error } = await startConversationWithAttachments(targetId, selfId, subject, body, files)
     if (error || !data) {
-      setError(error?.message ?? "Couldn't start the conversation.")
+      setError(error ?? "Couldn't start the conversation.")
       setSending(false)
       return
     }
-    onStarted(data as string)
+    onStarted(data)
+  }
+
+  function addFiles(picked: File[]) {
+    const { accepted, error } = acceptChatFiles(files, picked)
+    setError(error)
+    if (accepted.length > 0) setFiles((prev) => [...prev, ...accepted])
   }
 
   return (
@@ -340,6 +349,15 @@ function ComposeSheet({
             className="w-full card px-3 py-2.5 text-sm text-ink outline-none resize-none"
           />
         </label>
+        <div>
+          <PendingAttachments files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
+          <div className="flex items-center gap-2.5">
+            <AttachButton count={files.length} disabled={sending} onPick={addFiles} />
+            <span className="text-sm text-ink-soft">
+              {files.length > 0 ? `${files.length} attached` : "Attach photos or files"}
+            </span>
+          </div>
+        </div>
         {error && <p className="text-sm text-rust">{error}</p>}
       </div>
     </Sheet>
