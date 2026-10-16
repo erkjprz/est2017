@@ -44,8 +44,14 @@ const shortDate = (ms: number) => {
 // whole remaining balance for a lump sum, due at the end of the term.
 // Payments still waiting for approval already count against what's left.
 type NextPayment =
-  | { kind: "due"; amount: number; dueLabel: string | null; overdue: string | null }
+  | { kind: "due"; amount: number | null; dueLabel: string | null; overdue: string | null }
   | { kind: "covered" }
+
+// Loans whose borrower pays on their own schedule rather than total ÷ term
+// (Andy Go's started repaying months late), so a computed amount would be a
+// guess at a plan they don't have. The card still shows the due date or
+// overdue flag, just no amount.
+const HIDE_NEXT_PAYMENT_AMOUNT = new Set(["0e483467-2c76-4b27-8066-54d5a74b9357"])
 
 function nextPayment(loan: Loan): NextPayment | null {
   if (loan.status !== "active") return null
@@ -66,6 +72,11 @@ function nextPayment(loan: Loan): NextPayment | null {
         loan.due_day
       )
 
+  if (HIDE_NEXT_PAYMENT_AMOUNT.has(loan.loan_id)) {
+    const dueLabel = loan.repayment_frequency === "monthly" ? null : lumpSumDueLabel(loan)
+    return { kind: "due", amount: null, dueLabel, overdue }
+  }
+
   if (loan.repayment_frequency === "monthly" && loan.term_months) {
     const installment = Math.round((loan.totalRepayable / loan.term_months) * 100) / 100
     const dueLabel = loan.due_day ? shortDate(nextDueDate(
@@ -75,12 +86,14 @@ function nextPayment(loan: Loan): NextPayment | null {
     return { kind: "due", amount: Math.min(installment, remaining), dueLabel, overdue }
   }
 
-  let dueLabel: string | null = null
-  if (loan.term_months) {
-    const [y, m, d] = loan.start_date.split("-").map(Number)
-    dueLabel = shortDate(Date.UTC(y, m - 1 + loan.term_months, d))
-  }
-  return { kind: "due", amount: remaining, dueLabel, overdue }
+  return { kind: "due", amount: remaining, dueLabel: lumpSumDueLabel(loan), overdue }
+}
+
+// A lump sum is due at the end of the term.
+function lumpSumDueLabel(loan: Loan): string | null {
+  if (!loan.term_months) return null
+  const [y, m, d] = loan.start_date.split("-").map(Number)
+  return shortDate(Date.UTC(y, m - 1 + loan.term_months, d))
 }
 
 // `editable` gates the Edit/Fix & resend actions -- off for the admin
@@ -172,7 +185,9 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                         Fully paid once your pending payment is approved.
                       </p>
                     )}
-                    {next?.kind === "due" && (
+                    {/* Nothing to show when the amount is hidden and
+                        there's no date or overdue flag either. */}
+                    {next?.kind === "due" && (next.amount != null || next.overdue || next.dueLabel) && (
                       <div className="mt-3 rounded-md bg-paper px-3.5 py-2.5 flex items-baseline justify-between gap-3">
                         <span className="min-w-0">
                           <span className="block text-[10px] uppercase tracking-wide text-ink-soft font-mono">Next payment</span>
@@ -185,9 +200,11 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                             </span>
                           )}
                         </span>
-                        <span className="font-mono [font-variant-numeric:tabular-nums] text-base font-bold text-ink whitespace-nowrap">
-                          ₱{fmt(next.amount)}
-                        </span>
+                        {next.amount != null && (
+                          <span className="font-mono [font-variant-numeric:tabular-nums] text-base font-bold text-ink whitespace-nowrap">
+                            ₱{fmt(next.amount)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </>
