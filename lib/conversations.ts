@@ -113,7 +113,6 @@ const LINKED_TRANSACTION_COLUMNS = `
   from_bank_account:bank_accounts!transactions_bank_account_id_fkey ( bank_name, account_name )
 `
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function fetchLinkedTransaction(transactionId: string): Promise<any | null> {
   const { data } = await supabase
     .from("transactions")
@@ -146,7 +145,6 @@ export async function setConversationTransaction(conversationId: string, transac
 // Candidates for linking to a member's thread: their own entries plus
 // every entry on a loan they hold or borrowed (as a member or through
 // their borrower record) -- the rows that member can be asked about.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function listMemberTransactions(memberId: string): Promise<{ data: any[]; error: string | null }> {
   const { data: borrowers } = await supabase.from("borrowers").select("borrower_id").eq("member_id", memberId)
   const borrowerIds = (borrowers ?? []).map((b) => b.borrower_id as string)

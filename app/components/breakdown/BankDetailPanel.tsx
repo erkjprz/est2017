@@ -285,6 +285,7 @@ export function BankDetailPanel({
   useEffect(() => {
     if (bank) {
       load()
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data when the selected bank changes
       loadPending()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -300,7 +301,7 @@ export function BankDetailPanel({
   if (notFound) {
     return (
       <div>
-        <p className="text-sm text-ink-soft">This bank couldn't be found.</p>
+        <p className="text-sm text-ink-soft">This bank couldn&apos;t be found.</p>
         <button onClick={onBack} className="mt-4 text-sm font-medium text-gold">
           ← Back to Banks
         </button>

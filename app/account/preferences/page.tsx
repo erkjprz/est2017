@@ -203,6 +203,7 @@ export default function PreferencesPage() {
     }
 
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitted: the left-out values are fallbacks/cache data, and depending on them would refetch in a loop
   }, [authLoading, member])
 
   // Keeps the cached snapshot in step with what was just saved, so a

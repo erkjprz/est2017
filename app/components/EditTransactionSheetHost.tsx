@@ -53,6 +53,7 @@ function EditTransactionSheetWatcher() {
 
   useEffect(() => {
     if (!requestedId) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- copies the ?editTransaction= param into state, then clears it from the URL
     setTransactionId(requestedId)
     router.replace(pathname, { scroll: false })
   }, [requestedId, pathname, router])

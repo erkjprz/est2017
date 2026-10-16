@@ -30,6 +30,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = localStorage.getItem("haru-theme")
     const initial: ThemePreference = stored === "light" || stored === "dark" ? stored : "system"
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and matchMedia are only readable after hydration
     setPreferenceState(initial)
     setTheme(initial === "system" ? (systemPrefersDark() ? "dark" : "light") : initial)
     setMounted(true)

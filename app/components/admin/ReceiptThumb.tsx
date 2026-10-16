@@ -37,7 +37,6 @@ export function ReceiptThumb({ path, label = "Receipt", onOpen }: { path: string
           📄
         </span>
       ) : url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset
         <img src={url} alt={label} className="w-16 h-16 rounded-md border border-hairline object-cover bg-paper shrink-0" />
       ) : (
         <span className="w-16 h-16 rounded-md border border-hairline bg-paper animate-pulse shrink-0" />

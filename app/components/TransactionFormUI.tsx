@@ -400,7 +400,6 @@ export function ReceiptsField({
       {files.map((file, i) => (
         <div key={`${file.name}-${file.lastModified}-${i}`} className="border border-hairline rounded-md p-3 flex items-center gap-3">
           {previews[i] ? (
-            // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
             <img src={previews[i]!} alt="Receipt preview" className="w-16 h-16 object-cover rounded-md border border-hairline shrink-0" />
           ) : (
             <span className="w-16 h-16 rounded-md border border-hairline bg-paper flex items-center justify-center text-2xl shrink-0">
@@ -480,7 +479,6 @@ function SavedReceiptPreview({ path }: { path: string }) {
       </span>
     )
   }
-  // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset
   return <img src={url} alt="Current receipt" className="w-16 h-16 object-cover rounded-md border border-hairline shrink-0" />
 }
 

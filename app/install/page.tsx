@@ -440,6 +440,7 @@ export default function InstallPage() {
 
   useEffect(() => {
     const ua = navigator.userAgent || ""
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- navigator and window.location are only readable after hydration
     setPlatform(/android/i.test(ua) ? "android" : "ios")
     setCanShare(typeof navigator.share === "function")
     setHost(window.location.host)

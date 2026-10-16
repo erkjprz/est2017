@@ -114,8 +114,8 @@ export function SupportPanel() {
   // pulls every transaction regardless of status (unlike the Txns tab's
   // pending-only query) and isn't needed until someone opens Support.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- load is a hoisted function declaration below, and effects only run after render
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function load() {

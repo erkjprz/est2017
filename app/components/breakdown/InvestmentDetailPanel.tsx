@@ -98,6 +98,7 @@ export function InvestmentDetailPanel({
     const next = data as Investment
     setInvestment(next)
     return next
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitted: the left-out values are fallbacks/cache data, and depending on them would refetch in a loop
   }, [investmentId])
 
   const loadShares = useCallback(async () => {
@@ -126,6 +127,7 @@ export function InvestmentDetailPanel({
       setLoadError(error.message)
     }
     return shares
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitted: the left-out values are fallbacks/cache data, and depending on them would refetch in a loop
   }, [investmentId])
 
   const loadRecentTransactions = useCallback(async () => {
@@ -184,6 +186,7 @@ export function InvestmentDetailPanel({
     return () => {
       cancelled = true
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitted: the left-out values are fallbacks/cache data, and depending on them would refetch in a loop
   }, [investmentId, member, loadInvestment, loadShares, loadRecentTransactions])
 
   async function reloadAfterAdminAction() {
@@ -210,7 +213,7 @@ export function InvestmentDetailPanel({
   if (notFound || !investment) {
     return (
       <div>
-        <p className="text-sm text-ink-soft">This investment couldn't be found.</p>
+        <p className="text-sm text-ink-soft">This investment couldn&apos;t be found.</p>
         <button onClick={onBack} className="mt-4 text-sm font-medium text-gold">
           ← Back to Investments
         </button>
