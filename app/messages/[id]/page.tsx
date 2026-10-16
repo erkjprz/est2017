@@ -9,14 +9,13 @@ import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { AttachButton, MessageAttachments, PendingAttachments } from "@/app/components/ChatAttachments"
 import { TransactionRow, type Txn } from "@/app/components/transactions/TransactionParts"
-import { Sheet } from "@/app/components/Sheet"
+import { TransactionPickerSheet } from "@/app/components/TransactionPickerSheet"
 import {
   BODY_MAX,
   MESSAGE_COLUMNS,
   acceptChatFiles,
   fetchLinkedTransaction,
   formatMessageTime,
-  listMemberTransactions,
   markConversationRead,
   removeChatAttachments,
   setConversationStatus,
@@ -362,7 +361,7 @@ export default function ConversationPage() {
       {pickingTransaction && conversation && (
         <TransactionPickerSheet
           memberId={conversation.member_id}
-          memberName={memberName}
+          title={`Link ${memberName ? `${memberName}'s` : "a"} transaction`}
           currentId={conversation.transaction_id}
           busy={linkBusy}
           error={linkError}
@@ -431,55 +430,3 @@ export default function ConversationPage() {
   )
 }
 
-// The thread member's entries (and their loans'), newest first; tapping
-// one links it.
-function TransactionPickerSheet({
-  memberId,
-  memberName,
-  currentId,
-  busy,
-  error,
-  onPick,
-  onClose
-}: {
-  memberId: string
-  memberName: string
-  currentId: string | null
-  busy: boolean
-  error: string
-  onPick: (t: Txn) => void
-  onClose: () => void
-}) {
-  const [rows, setRows] = useState<Txn[] | null>(null)
-  const [loadError, setLoadError] = useState("")
-
-  useEffect(() => {
-    let cancelled = false
-    listMemberTransactions(memberId).then(({ data, error }) => {
-      if (cancelled) return
-      if (error) setLoadError(error)
-      setRows(data.filter((t) => t.transaction_id !== currentId))
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [memberId, currentId])
-
-  return (
-    <Sheet title={`Link ${memberName ? `${memberName}'s` : "a"} transaction`} onClose={onClose}>
-      {error && <p className="text-sm text-rust mb-3">{error}</p>}
-      {loadError && <p className="text-sm text-rust mb-3">Couldn&apos;t load transactions: {loadError}</p>}
-      {rows === null ? (
-        <SkeletonPanel />
-      ) : rows.length === 0 && !loadError ? (
-        <p className="text-sm text-ink-soft text-center py-8">No other transactions for this member.</p>
-      ) : (
-        <div className={`space-y-2 ${busy ? "opacity-60 pointer-events-none" : ""}`}>
-          {rows.map((t) => (
-            <TransactionRow key={t.transaction_id} t={t} onOpen={() => onPick(t)} />
-          ))}
-        </div>
-      )}
-    </Sheet>
-  )
-}

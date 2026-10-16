@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import Navbar from "@/app/components/Navbar"
@@ -9,6 +9,7 @@ import { Sheet } from "@/app/components/Sheet"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachments"
+import { TransactionPickerSheet } from "@/app/components/TransactionPickerSheet"
 import { TransactionRow, cardDate, describeTransaction, formatSigned, type Txn } from "@/app/components/transactions/TransactionParts"
 import { readCache, writeCache } from "@/lib/cache"
 import {
@@ -274,22 +275,35 @@ function ComposeSheet({
   const [files, setFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
+  // The transaction the thread will be about (optional) -- arrives with a
+  // "?txn=" link or is picked here.
   const [transaction, setTransaction] = useState<Txn | null>(null)
+  const [loadingTransaction, setLoadingTransaction] = useState(!!transactionId)
+  const [pickingTransaction, setPickingTransaction] = useState(false)
+  // The subject last filled in from a transaction, so picking another (or
+  // removing it) only replaces a subject the sender hasn't typed over.
+  const autoSubject = useRef("")
 
-  // The linked row is shown above the message, and names the thread until
-  // the sender types their own subject.
+  function chooseTransaction(t: Txn | null) {
+    setTransaction(t)
+    setPickingTransaction(false)
+    const v = t ? describeTransaction(t) : null
+    const next = t && v ? `${v.typeLabel} · ${formatSigned(Number(t.amount), v.direction)} · ${cardDate(t)}`.slice(0, SUBJECT_MAX) : ""
+    setSubject((s) => (s === "" || s === autoSubject.current ? next : s))
+    autoSubject.current = next
+  }
+
   useEffect(() => {
     if (!transactionId) return
     let cancelled = false
     fetchLinkedTransaction(transactionId).then((t) => {
       if (cancelled) return
+      setLoadingTransaction(false)
       if (!t) {
         setError("That transaction couldn't be found.")
         return
       }
-      setTransaction(t)
-      const v = describeTransaction(t)
-      setSubject((s) => s || `${v.typeLabel} · ${formatSigned(Number(t.amount), v.direction)} · ${cardDate(t)}`.slice(0, SUBJECT_MAX))
+      chooseTransaction(t)
     })
     return () => {
       cancelled = true
@@ -308,7 +322,7 @@ function ComposeSheet({
   }, [isAdmin, selfId])
 
   const targetId = isAdmin ? recipientId : selfId
-  const canSend = (!transactionId || !!transaction) && !!targetId && subject.trim().length > 0 && (body.trim().length > 0 || files.length > 0) && !sending
+  const canSend = !loadingTransaction && !!targetId && subject.trim().length > 0 && (body.trim().length > 0 || files.length > 0) && !sending
 
   async function send() {
     if (!canSend) return
@@ -330,6 +344,7 @@ function ComposeSheet({
   }
 
   return (
+    <>
     <Sheet
       title={isAdmin ? "Message a Member" : "Chat with Est. 2017"}
       onClose={onClose}
@@ -345,18 +360,16 @@ function ComposeSheet({
       }
     >
       <div className="space-y-3">
-        {transactionId && (
-          <div>
-            <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">About</span>
-            {transaction ? <TransactionRow t={transaction} /> : <div className="card h-[68px] animate-pulse" />}
-          </div>
-        )}
         {isAdmin && (
           <label className="block">
             <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">To</span>
             <select
               value={recipientId}
-              onChange={(e) => setRecipientId(e.target.value)}
+              onChange={(e) => {
+                setRecipientId(e.target.value)
+                // A picked transaction belongs to the previous member.
+                if (transaction) chooseTransaction(null)
+              }}
               className="w-full card px-3 py-2.5 text-sm text-ink"
             >
               <option value="">Choose a member…</option>
@@ -369,6 +382,35 @@ function ComposeSheet({
             </select>
           </label>
         )}
+        <div>
+          <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">
+            About a transaction <span className="normal-case tracking-normal">(optional)</span>
+          </span>
+          {loadingTransaction ? (
+            <div className="card h-[68px] animate-pulse" />
+          ) : transaction ? (
+            <>
+              <TransactionRow t={transaction} />
+              <div className="flex items-center gap-4 text-[13px] mt-2 px-1">
+                <button type="button" onClick={() => setPickingTransaction(true)} className="text-ink-soft hover:text-ink">
+                  Change
+                </button>
+                <button type="button" onClick={() => chooseTransaction(null)} className="text-ink-soft hover:text-rust">
+                  Remove
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPickingTransaction(true)}
+              disabled={!targetId}
+              className="w-full card px-3 py-2.5 text-sm text-left text-ink-soft disabled:opacity-60"
+            >
+              {targetId ? "+ Link a transaction" : "Choose a member first"}
+            </button>
+          )}
+        </div>
         <label className="block">
           <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">Subject</span>
           <input
@@ -417,5 +459,15 @@ function ComposeSheet({
         {error && <p className="text-sm text-rust">{error}</p>}
       </div>
     </Sheet>
+    {pickingTransaction && targetId && (
+      <TransactionPickerSheet
+        memberId={targetId}
+        title={isAdmin ? "Which transaction" : "Which of your transactions"}
+        currentId={transaction?.transaction_id ?? null}
+        onPick={chooseTransaction}
+        onClose={() => setPickingTransaction(false)}
+      />
+    )}
+    </>
   )
 }
