@@ -123,7 +123,8 @@ export async function fetchTransactionsFields() {
         loans!transactions_loan_id_fkey (
           name,
           borrowers!loans_borrower_id_fkey (
-            name
+            name,
+            member_id
           )
         ),
         investments!transactions_investment_id_fkey (

@@ -47,11 +47,15 @@ export async function listConversations() {
   return { data: data as ConversationSummary[] | null, error }
 }
 
-export async function startConversation(memberId: string, subject: string, body: string) {
+// transactionId links the new thread to that transaction (see the
+// 20261016000002 migration). It's only sent when set, so unlinked threads
+// keep calling the original signatures.
+export async function startConversation(memberId: string, subject: string, body: string, transactionId?: string | null) {
   return supabase.rpc("start_conversation", {
     p_member_id: memberId,
     p_subject: subject.trim(),
-    p_body: body.trim()
+    p_body: body.trim(),
+    ...(transactionId ? { p_transaction_id: transactionId } : {})
   })
 }
 
@@ -64,16 +68,18 @@ export async function startConversationWithAttachments(
   senderId: string,
   subject: string,
   body: string,
-  files: File[]
+  files: File[],
+  transactionId?: string | null
 ): Promise<{ data: string | null; error: string | null }> {
   if (files.length === 0) {
-    const { data, error } = await startConversation(memberId, subject, body)
+    const { data, error } = await startConversation(memberId, subject, body, transactionId)
     return { data: (data as string | null) ?? null, error: error?.message ?? null }
   }
 
   const { data: id, error: openError } = await supabase.rpc("open_conversation", {
     p_member_id: memberId,
-    p_subject: subject.trim()
+    p_subject: subject.trim(),
+    ...(transactionId ? { p_transaction_id: transactionId } : {})
   })
   if (openError || !id) return { data: null, error: openError?.message ?? "Couldn't start the conversation." }
   const conversationId = id as string
@@ -93,6 +99,39 @@ export async function startConversationWithAttachments(
     return { data: null, error: insertError.message }
   }
   return { data: conversationId, error: null }
+}
+
+// Just enough of a transaction to show it as a TransactionRow on the
+// thread it's linked to. RLS applies: someone who can't see the row gets
+// null and the thread simply shows no card.
+const LINKED_TRANSACTION_COLUMNS = `
+  transaction_id, txn_date, created_at, description, amount, bank, member_id, loan_id,
+  classification, status, receipt_url, receipt_urls, rejection_reason,
+  members!transactions_member_id_fkey ( name ),
+  loans!transactions_loan_id_fkey ( name, borrowers!loans_borrower_id_fkey ( name, member_id ) ),
+  investments!transactions_investment_id_fkey ( name ),
+  from_bank_account:bank_accounts!transactions_bank_account_id_fkey ( bank_name, account_name )
+`
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function fetchLinkedTransaction(transactionId: string): Promise<any | null> {
+  const { data } = await supabase
+    .from("transactions")
+    .select(LINKED_TRANSACTION_COLUMNS)
+    .eq("transaction_id", transactionId)
+    .maybeSingle()
+  return data ?? null
+}
+
+// Threads already about a transaction -- shown on its detail sheet. RLS
+// limits members to their own threads.
+export async function listTransactionConversations(transactionId: string) {
+  const { data } = await supabase
+    .from("conversations")
+    .select("id, subject, status, last_message_at")
+    .eq("transaction_id", transactionId)
+    .order("last_message_at", { ascending: false })
+  return (data ?? []) as { id: string; subject: string; status: "open" | "closed"; last_message_at: string }[]
 }
 
 export async function markConversationRead(conversationId: string) {

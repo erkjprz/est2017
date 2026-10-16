@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Sheet } from "@/app/components/Sheet"
 import { ReviewRow } from "@/app/components/TransactionFormUI"
@@ -8,6 +9,7 @@ import { receiptPaths } from "@/lib/receiptUrl"
 import { AdminActionRow } from "@/app/components/breakdown/AdminMenu"
 import { TRANSACTION_TYPE_LABELS as typeLabels } from "@/lib/transactionLabels"
 import { bankAccountLabel } from "@/lib/transactionsSnapshot"
+import { listTransactionConversations } from "@/lib/conversations"
 
 // The pieces of the Transactions page that describe one row: how it reads
 // in the list, its detail sheet, and who may edit it.
@@ -225,11 +227,17 @@ function amountToneFor(t: Txn, v: TxnView): string {
   return v.direction === 1 && (MONEY_IN.has(t.classification) || isGainShare) ? "text-sage" : "text-ink"
 }
 
-export function TransactionRow({ t, onOpen }: { t: Txn; onOpen: () => void }) {
+// Without onOpen it renders as a plain card (e.g. on a borrower's chat
+// thread, where there's no transaction screen to open).
+export function TransactionRow({ t, onOpen }: { t: Txn; onOpen?: () => void }) {
   const v = describeTransaction(t)
   const amountTone = amountToneFor(t, v)
+  const Root = onOpen ? "button" : "div"
   return (
-    <button type="button" onClick={onOpen} className="w-full card px-4 py-3 text-left flex flex-col gap-0.5">
+    <Root
+      {...(onOpen ? { type: "button" as const, onClick: onOpen } : {})}
+      className="w-full card px-4 py-3 text-left flex flex-col gap-0.5"
+    >
       <span className="flex items-baseline justify-between gap-3">
         <span className="font-display text-[17px] font-semibold truncate min-w-0">{v.displayName}</span>
         <span className={`font-mono [font-variant-numeric:tabular-nums] text-[17px] font-bold whitespace-nowrap ${amountTone}`}>
@@ -255,7 +263,7 @@ export function TransactionRow({ t, onOpen }: { t: Txn; onOpen: () => void }) {
       ) : (
         v.detail && <span className="text-xs text-ink-soft font-mono truncate">{v.detail}</span>
       )}
-    </button>
+    </Root>
   )
 }
 
@@ -298,6 +306,35 @@ export function TransactionDetailSheet({
     links.push({ label: `Open ${bankKey}`, hint: "See this bank's balance and activity", onClick: () => router.push(`/fund-breakdown?tab=banks&bank=${encodeURIComponent(bankKey)}`) })
   if (reviewInQueue)
     links.push({ label: "Review in Admin queue", hint: "Approve or reject this entry", onClick: () => router.push(`/admin?review=${t.transaction_id}`) })
+
+  // Starting a chat about this row. Members ask the admins; admins message
+  // whoever the row belongs to (the member, or a loan's borrower), so rows
+  // with nobody on the other side (bank interest, expenses) get no entry.
+  const recipientId: string | null = isAdmin ? t.member_id ?? t.loans?.borrowers?.member_id ?? null : memberId ?? null
+  const recipientName: string | null = t.members?.name ?? t.loans?.borrowers?.name ?? null
+  if (recipientId && !(isAdmin && recipientId === memberId))
+    links.push({
+      label: isAdmin ? `Message ${recipientName ?? "member"}` : "Ask about this",
+      hint: isAdmin ? "Start a conversation about this entry" : "Send the admins a question about this entry",
+      onClick: () => router.push(`/messages?txn=${t.transaction_id}${isAdmin ? `&to=${recipientId}` : ""}`)
+    })
+
+  const [threads, setThreads] = useState<Awaited<ReturnType<typeof listTransactionConversations>>>([])
+  useEffect(() => {
+    let cancelled = false
+    listTransactionConversations(t.transaction_id).then((rows) => {
+      if (!cancelled) setThreads(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [t.transaction_id])
+  for (const c of threads)
+    links.push({
+      label: c.subject,
+      hint: `Conversation${c.status === "closed" ? " · closed" : ""}`,
+      onClick: () => router.push(`/messages/${c.id}`)
+    })
 
   const fromBank = bankAccountLabel(t.from_bank_account) || t.bank || null
   const toBank = bankAccountLabel(t.to_bank_account) || null
@@ -363,7 +400,7 @@ export function TransactionDetailSheet({
       {links.length > 0 && (
         <div className="card px-4 mt-4">
           {links.map((l, i) => (
-            <AdminActionRow key={l.label} label={l.label} hint={l.hint} onClick={l.onClick} last={i === links.length - 1} />
+            <AdminActionRow key={`${i}-${l.label}`} label={l.label} hint={l.hint} onClick={l.onClick} last={i === links.length - 1} />
           ))}
         </div>
       )}
