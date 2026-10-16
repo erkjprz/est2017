@@ -10,7 +10,7 @@ import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachments"
 import { TransactionPickerSheet } from "@/app/components/TransactionPickerSheet"
-import { TransactionRow, cardDate, describeTransaction, formatSigned, type Txn } from "@/app/components/transactions/TransactionParts"
+import { TransactionRow, cardDate, describeTransaction, type Txn } from "@/app/components/transactions/TransactionParts"
 import { readCache, writeCache } from "@/lib/cache"
 import {
   ATTACHMENTS_MAX,
@@ -25,6 +25,14 @@ import {
 } from "@/lib/conversations"
 
 type MemberOption = { member_id: string; name: string; role: string }
+
+// "Loan Release · ₱100K · 15 Oct" -- short enough for one line in the
+// inbox. The amount is compact and unsigned: the type already says which
+// way the money went, and a leading minus read as a stray dash.
+const compactPeso = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 })
+function transactionSubject(t: Txn): string {
+  return `${describeTransaction(t).typeLabel} · ₱${compactPeso.format(Math.abs(Number(t.amount)))} · ${cardDate(t)}`.slice(0, SUBJECT_MAX)
+}
 
 // useSearchParams() (for the admin "?to=<memberId>" deep link from the
 // Members page, and "?txn=<transactionId>" from a transaction's "Ask about
@@ -287,8 +295,7 @@ function ComposeSheet({
   function chooseTransaction(t: Txn | null) {
     setTransaction(t)
     setPickingTransaction(false)
-    const v = t ? describeTransaction(t) : null
-    const next = t && v ? `${v.typeLabel} · ${formatSigned(Number(t.amount), v.direction)} · ${cardDate(t)}`.slice(0, SUBJECT_MAX) : ""
+    const next = t ? transactionSubject(t) : ""
     setSubject((s) => (s === "" || s === autoSubject.current ? next : s))
     autoSubject.current = next
   }

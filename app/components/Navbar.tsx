@@ -12,6 +12,14 @@ import { notifyTransactionsChanged } from "@/lib/transactionEvents"
 import { loadTransactionFormData } from "@/lib/transactionFormPrefetch"
 import { whenIdle } from "@/lib/whenIdle"
 
+// --dock-h: the distance from the bottom edge to the top of whichever of
+// the dock's floating parts sticks up furthest (see the measuring effect).
+function setDockHeight(...els: (Element | null)[]) {
+  const tops = els.filter((el): el is Element => !!el).map((el) => el.getBoundingClientRect().top)
+  if (tops.length === 0) return
+  document.documentElement.style.setProperty("--dock-h", `${window.innerHeight - Math.min(...tops)}px`)
+}
+
 // Split out of the shared bundle -- it's only rendered once the FAB is
 // tapped, so there's no reason for every page to download it up front.
 // Navbar preloads it in the background once a member is signed in (see
@@ -125,6 +133,11 @@ export default function Navbar() {
   const fabRef = useRef<HTMLButtonElement>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  // True while the on-screen keyboard is up (a text field is focused on a
+  // touch device). iOS lifts fixed elements above the keyboard, so the dock
+  // would otherwise ride up with it and squeeze whatever's being typed
+  // into -- e.g. the chat reply box, which sits on top of the dock.
+  const [typing, setTyping] = useState(false)
 
   // Warms NewTransactionSheet's data cache the moment this page has a
   // signed-in member, well before the FAB is ever tapped -- without
@@ -156,11 +169,9 @@ export default function Navbar() {
     // of how any of those are expressed (env(), calc(), rem) and however
     // they change.
     function update() {
-      const tops = [barRef.current?.getBoundingClientRect().top, fabRef.current?.getBoundingClientRect().top].filter(
-        (t): t is number => t != null
-      )
-      if (tops.length === 0) return
-      document.documentElement.style.setProperty("--dock-h", `${window.innerHeight - Math.min(...tops)}px`)
+      // Hidden while typing (see below), when --dock-h is pinned to 0.
+      if (navRef.current?.hidden) return
+      setDockHeight(barRef.current, fabRef.current)
     }
     update()
     const observers = [barRef.current, fabRef.current]
@@ -176,6 +187,36 @@ export default function Navbar() {
       window.removeEventListener("resize", update)
     }
   }, [])
+
+  useEffect(() => {
+    if (!window.matchMedia("(pointer: coarse)").matches) return
+    const isTextField = (el: Element | null) =>
+      el instanceof HTMLTextAreaElement ||
+      (el instanceof HTMLElement && el.isContentEditable) ||
+      (el instanceof HTMLInputElement && !["button", "checkbox", "radio", "range", "file", "submit", "reset", "color"].includes(el.type))
+    // focusout fires before focus lands on the next field, so check where
+    // focus ended up on the next frame rather than hiding/showing on every
+    // hop between two fields.
+    let frame = 0
+    const sync = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => setTyping(isTextField(document.activeElement)))
+    }
+    document.addEventListener("focusin", sync)
+    document.addEventListener("focusout", sync)
+    return () => {
+      cancelAnimationFrame(frame)
+      document.removeEventListener("focusin", sync)
+      document.removeEventListener("focusout", sync)
+    }
+  }, [])
+
+  // Pages clear the dock with --dock-h, so it drops to 0 while the dock is
+  // hidden and is re-measured once it's back.
+  useEffect(() => {
+    if (typing) document.documentElement.style.setProperty("--dock-h", "0px")
+    else setDockHeight(barRef.current, fabRef.current)
+  }, [typing])
 
   // iOS can leave a `position: fixed` element positioned against a stale
   // layout viewport on a page too short to ever scroll on its own (a
@@ -273,7 +314,7 @@ export default function Navbar() {
         </div>
       </nav>
 
-      <nav ref={navRef} className="fixed inset-x-0 bottom-0 z-40" style={{ paddingBottom: DOCK_OFFSET }}>
+      <nav ref={navRef} hidden={typing} className="fixed inset-x-0 bottom-0 z-40" style={{ paddingBottom: DOCK_OFFSET }}>
           <div className="relative max-w-3xl mx-auto px-4">
             <div
               ref={barRef}

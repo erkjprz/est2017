@@ -128,10 +128,10 @@ export async function fetchLinkedTransaction(transactionId: string): Promise<any
 export async function listTransactionConversations(transactionId: string) {
   const { data } = await supabase
     .from("conversations")
-    .select("id, subject, status, last_message_at")
+    .select("id, member_id, subject, status, last_message_at")
     .eq("transaction_id", transactionId)
     .order("last_message_at", { ascending: false })
-  return (data ?? []) as { id: string; subject: string; status: "open" | "closed"; last_message_at: string }[]
+  return (data ?? []) as { id: string; member_id: string; subject: string; status: "open" | "closed"; last_message_at: string }[]
 }
 
 // Admin-only: link an existing thread to a transaction, or clear the link
