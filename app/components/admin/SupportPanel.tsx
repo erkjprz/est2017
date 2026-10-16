@@ -614,7 +614,7 @@ function SupportEditForm({
       )}
 
       <div className="mt-4">
-        <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
+        <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipts</p>
         <ReceiptsField
           files={receipts}
           onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}

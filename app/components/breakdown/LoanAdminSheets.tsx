@@ -335,7 +335,7 @@ export function ReleaseLoanSheet({
             onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}
             onRemoveFile={(i) => setReceipts((prev) => prev.filter((_, j) => j !== i))}
             accept="image/*,.pdf"
-            emptyLabel="Tap to upload a photo or PDF"
+            emptyLabel="Tap to upload photos or PDFs"
             addLabel="Add another file"
             error={showErrors && receipts.length === 0 ? "Attach proof of the transfer" : undefined}
           />
