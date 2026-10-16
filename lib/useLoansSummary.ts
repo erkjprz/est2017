@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
 import { readCache, writeCache } from "@/lib/cache"
+import { TRANSACTIONS_CHANGED_EVENT } from "@/lib/transactionEvents"
 
 export type LoanTransaction = {
   transaction_id: string
@@ -180,6 +181,15 @@ export function useLoansSummary(memberId: string | undefined) {
   const [loading, setLoading] = useState(!cached)
   const [loans, setLoans] = useState<Loan[]>(cached ?? [])
   const [loadError, setLoadError] = useState("")
+  // Bumped after a transaction is saved from the + sheet, so a payment
+  // just recorded shows up without navigating away and back.
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    const bump = () => setRefreshKey((k) => k + 1)
+    window.addEventListener(TRANSACTIONS_CHANGED_EVENT, bump)
+    return () => window.removeEventListener(TRANSACTIONS_CHANGED_EVENT, bump)
+  }, [])
 
   useEffect(() => {
     if (!memberId) return
@@ -212,7 +222,7 @@ export function useLoansSummary(memberId: string | undefined) {
     return () => {
       cancelled = true
     }
-  }, [memberId])
+  }, [memberId, refreshKey])
 
   return { loading, loans, loadError }
 }

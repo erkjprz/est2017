@@ -10,6 +10,8 @@ import { TRANSACTION_TYPE_LABELS as TXN_TYPE_LABELS } from "@/lib/transactionLab
 import { readCache, writeCache } from "@/lib/cache"
 import { TRANSACTIONS_CHANGED_EVENT } from "@/lib/transactionEvents"
 import { fetchDashboardFields, type DashboardSnapshot, type RecentTransaction } from "@/lib/dashboardSnapshot"
+import { useLoansSummary } from "@/lib/useLoansSummary"
+import { DashboardLoanCard } from "@/app/components/DashboardLoanCard"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -30,6 +32,12 @@ export default function DashboardPage() {
   const [myPendingCount, setMyPendingCount] = useState(cached?.myPendingCount ?? 0)
   const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>(cached?.recentTransactions ?? [])
   const [loadError, setLoadError] = useState("")
+
+  // Members who also borrow see their active loan here -- otherwise it's
+  // only at the bottom of their Breakdown. Borrower-only accounts never
+  // reach this page (they go to /borrower).
+  const { loans } = useLoansSummary(member?.member_id)
+  const activeLoans = loans.filter((l) => l.status === "active")
 
   const memberName = member?.name ?? ""
   const isAdmin = member?.role === "admin"
@@ -224,6 +232,10 @@ export default function DashboardPage() {
             </p>
             <p className="text-[12px] text-gold font-semibold mt-2.5">View fund breakdown →</p>
           </button>
+
+          {activeLoans.map((loan) => (
+            <DashboardLoanCard key={loan.loan_id} loan={loan} />
+          ))}
 
           <div className="mt-4">
             <ScanToPayCard />

@@ -43,7 +43,7 @@ const shortDate = (ms: number) => {
 // term) for a monthly loan, due on the next due date when one is set; the
 // whole remaining balance for a lump sum, due at the end of the term.
 // Payments still waiting for approval already count against what's left.
-type NextPayment =
+export type NextPayment =
   | { kind: "due"; amount: number | null; dueLabel: string | null; overdue: string | null }
   | { kind: "covered" }
 
@@ -53,7 +53,7 @@ type NextPayment =
 // overdue flag, just no amount.
 const HIDE_NEXT_PAYMENT_AMOUNT = new Set(["0e483467-2c76-4b27-8066-54d5a74b9357"])
 
-function nextPayment(loan: Loan): NextPayment | null {
+export function nextPayment(loan: Loan): NextPayment | null {
   if (loan.status !== "active") return null
   const remaining = Math.max(0, loan.outstanding - (loan.pendingRepaid ?? 0))
   if (remaining <= 0.005) return (loan.pendingRepaid ?? 0) > 0 ? { kind: "covered" } : null
@@ -94,6 +94,40 @@ function lumpSumDueLabel(loan: Loan): string | null {
   if (!loan.term_months) return null
   const [y, m, d] = loan.start_date.split("-").map(Number)
   return shortDate(Date.UTC(y, m - 1 + loan.term_months, d))
+}
+
+// The "Next payment" box under a loan's progress bar -- also used by the
+// dashboard's active-loan card, so both read the same.
+export function NextPaymentBox({ next }: { next: NextPayment | null }) {
+  if (next?.kind === "covered") {
+    return (
+      <p className="mt-3 rounded-md bg-paper px-3.5 py-2.5 text-sm text-ink">
+        Fully paid once your pending payment is approved.
+      </p>
+    )
+  }
+  // Nothing to show when the amount is hidden and there's no date or
+  // overdue flag either.
+  if (next?.kind !== "due" || (next.amount == null && !next.overdue && !next.dueLabel)) return null
+  return (
+    <div className="mt-3 rounded-md bg-paper px-3.5 py-2.5 flex items-baseline justify-between gap-3">
+      <span className="min-w-0">
+        <span className="block text-[10px] uppercase tracking-wide text-ink-soft font-mono">Next payment</span>
+        {/* No due day on the loan (older monthly loans) means no date to
+            show -- just the amount, unless it's overdue. */}
+        {(next.overdue || next.dueLabel) && (
+          <span className={`block text-[12px] ${next.overdue ? "text-rust font-semibold" : "text-ink-soft"}`}>
+            {next.overdue ?? `Due ${next.dueLabel}`}
+          </span>
+        )}
+      </span>
+      {next.amount != null && (
+        <span className="font-mono [font-variant-numeric:tabular-nums] text-base font-bold text-ink whitespace-nowrap">
+          ₱{fmt(next.amount)}
+        </span>
+      )}
+    </div>
+  )
 }
 
 // `editable` gates the Edit/Fix & resend actions -- off for the admin
@@ -172,44 +206,10 @@ export function LoanCards({ loans, editable }: { loans: Loan[]; editable: boolea
                 ₱{fmt(loan.repaid)} of ₱{fmt(loan.totalRepayable)} repaid
               </p>
 
-              {(() => {
-                const next = nextPayment(loan)
-                const pending = loan.pendingRepaid ?? 0
-                return (
-                  <>
-                    {pending > 0 && (
-                      <p className="text-[12px] text-gold mt-1">₱{fmt(pending)} waiting for approval</p>
-                    )}
-                    {next?.kind === "covered" && (
-                      <p className="mt-3 rounded-md bg-paper px-3.5 py-2.5 text-sm text-ink">
-                        Fully paid once your pending payment is approved.
-                      </p>
-                    )}
-                    {/* Nothing to show when the amount is hidden and
-                        there's no date or overdue flag either. */}
-                    {next?.kind === "due" && (next.amount != null || next.overdue || next.dueLabel) && (
-                      <div className="mt-3 rounded-md bg-paper px-3.5 py-2.5 flex items-baseline justify-between gap-3">
-                        <span className="min-w-0">
-                          <span className="block text-[10px] uppercase tracking-wide text-ink-soft font-mono">Next payment</span>
-                          {/* No due day on the loan (older monthly loans) means
-                              no date to show -- just the amount, unless it's
-                              overdue. */}
-                          {(next.overdue || next.dueLabel) && (
-                            <span className={`block text-[12px] ${next.overdue ? "text-rust font-semibold" : "text-ink-soft"}`}>
-                              {next.overdue ?? `Due ${next.dueLabel}`}
-                            </span>
-                          )}
-                        </span>
-                        {next.amount != null && (
-                          <span className="font-mono [font-variant-numeric:tabular-nums] text-base font-bold text-ink whitespace-nowrap">
-                            ₱{fmt(next.amount)}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
+              {(loan.pendingRepaid ?? 0) > 0 && (
+                <p className="text-[12px] text-gold mt-1">₱{fmt(loan.pendingRepaid)} waiting for approval</p>
+              )}
+              <NextPaymentBox next={nextPayment(loan)} />
 
               {loan.transactions.length > 0 && (
                 <div className="mt-4 pt-3 border-t border-hairline">

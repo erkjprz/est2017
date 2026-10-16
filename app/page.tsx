@@ -65,6 +65,7 @@ export default function Home() {
     // one after another.
     const warm = Promise.all([
       warmDashboardCache(member),
+      warmLoansCache(member.member_id),
       warmTransactionsCache(),
       warmGroupBreakdownCache()
     ]).catch(() => {})
