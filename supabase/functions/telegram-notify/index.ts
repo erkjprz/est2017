@@ -10,21 +10,19 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
-// Kept in sync by hand with TRANSACTION_TYPE_LABELS in lib/transactionLabels.ts
-// -- this Deno function can't import from the Next.js app's lib.
 const CLASSIFICATION_LABEL: Record<string, string> = {
   "Opening Balance": "Opening Balance",
-  "Member Contribution": "Contribution",
-  "Member Withdrawal": "Withdrawal",
+  "Member Contribution": "Member Contribution",
+  "Member Withdrawal": "Member Withdrawal",
   "Loan Release": "Loan Release",
-  "Loan Repayment": "Loan Payment",
+  "Loan Repayment": "Loan Repayment",
   "Investment": "Investment",
   "Investment Return": "Investment Return",
   "Bank Interest": "Bank Interest",
   "Tax": "Tax",
-  "Internal Transfer": "Bank Transfer",
+  "Internal Transfer": "Internal Transfer",
   "Expense": "Expense",
-  "Gain Allocation": "Distributed Share",
+  "Gain Allocation": "Gain Allocation",
   "Bank Write-off": "Bank Write-off"
 }
 
@@ -88,7 +86,40 @@ async function describeTransaction(record: Record<string, unknown>) {
     if (data?.name) parts.push(`Investment: ${escapeHtml(data.name)}`)
   }
 
+  // Who actually recorded the entry -- distinct from record.member_id
+  // (whose money/account this is), matching the app's own "Recorded by
+  // {name}" on the transaction list. Null for a member's own pending
+  // submission (nothing to add there), set for anything an admin entered
+  // -- on someone's behalf, or a fund-level entry with no member at all.
+  if (record.submitted_by) {
+    const { data } = await supabase
+      .from("members")
+      .select("name")
+      .eq("member_id", record.submitted_by)
+      .maybeSingle()
+    if (data?.name) parts.push(`Recorded by: ${escapeHtml(data.name)}`)
+  }
+
   return parts
+}
+
+// The DB triggers send 'submitted' for a freshly-pending row awaiting a
+// decision, 'recorded' for an admin fund-bookkeeping entry (Bank
+// Interest/Expense/Investment) that's approved the moment it's created --
+// see notify_telegram_transaction -- and 'released' when a Loan Release is
+// approved (notify_telegram_loan_released). Separate headline for each so
+// a recorded or released entry doesn't read as something waiting on review.
+const EVENT_HEADLINE: Record<string, string> = {
+  submitted: "🔔 <b>New Transaction</b>",
+  recorded: "📒 <b>Recorded</b>",
+  released: "✅ <b>Loan Released</b>"
+}
+
+// A pending Loan Release is still only a request -- nothing has been
+// disbursed until it's approved -- so say so in the first message.
+function labelFor(classification: string, event: string) {
+  if (classification === "Loan Release" && event === "submitted") return "Loan Request"
+  return CLASSIFICATION_LABEL[classification] ?? classification
 }
 
 Deno.serve(async (req: Request) => {
@@ -107,18 +138,17 @@ Deno.serve(async (req: Request) => {
 
   const payload = await req.json().catch(() => null)
   const record = payload?.record as Record<string, unknown> | undefined
+  const event = typeof payload?.event === "string" ? payload.event : "submitted"
 
   if (!record) {
     return new Response("Bad request", { status: 400 })
   }
 
-  const classification = CLASSIFICATION_LABEL[record.classification as string] ?? record.classification
+  const classification = labelFor(String(record.classification), event)
   const amount = formatAmount(Number(record.amount))
 
-  // The DB trigger only ever calls this for a freshly-pending row now (see
-  // notify_telegram_transaction) -- one situation, so one fixed headline,
-  // no more varying by event/status.
-  const lines = [`🔔 <b>New transaction</b>`, `${escapeHtml(String(classification))} — ${amount}`]
+  const headline = EVENT_HEADLINE[event] ?? EVENT_HEADLINE.submitted
+  const lines = [headline, `${escapeHtml(classification)} — ${amount}`]
 
   const details = await describeTransaction(record)
   lines.push(...details)
