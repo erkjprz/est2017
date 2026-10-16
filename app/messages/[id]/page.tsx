@@ -9,15 +9,18 @@ import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { AttachButton, MessageAttachments, PendingAttachments } from "@/app/components/ChatAttachments"
 import { TransactionRow, type Txn } from "@/app/components/transactions/TransactionParts"
+import { Sheet } from "@/app/components/Sheet"
 import {
   BODY_MAX,
   MESSAGE_COLUMNS,
   acceptChatFiles,
   fetchLinkedTransaction,
   formatMessageTime,
+  listMemberTransactions,
   markConversationRead,
   removeChatAttachments,
   setConversationStatus,
+  setConversationTransaction,
   uploadChatAttachments,
   type ConversationMessage
 } from "@/lib/conversations"
@@ -53,6 +56,9 @@ export default function ConversationPage() {
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState("")
   const [statusBusy, setStatusBusy] = useState(false)
+  const [pickingTransaction, setPickingTransaction] = useState(false)
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkError, setLinkError] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const requestedNames = useRef(new Set<string>())
@@ -210,6 +216,22 @@ export default function ConversationPage() {
     if (!error) setConversation({ ...conversation, status: next })
   }
 
+  // Admin linking of an existing thread (null clears the link).
+  async function linkTransaction(t: Txn | null) {
+    if (!conversation || linkBusy) return
+    setLinkBusy(true)
+    setLinkError("")
+    const { error } = await setConversationTransaction(conversation.id, t?.transaction_id ?? null)
+    setLinkBusy(false)
+    if (error) {
+      setLinkError(error.message)
+      return
+    }
+    setConversation({ ...conversation, transaction_id: t?.transaction_id ?? null })
+    setTransaction(t)
+    setPickingTransaction(false)
+  }
+
   const Header = isBorrower ? BorrowerHeader : Navbar
   // Borrowers have no bottom dock, so the composer sits on the safe area
   // instead of above the (absent) dock.
@@ -272,13 +294,36 @@ export default function ConversationPage() {
                 )}
               </div>
 
-              {transaction && (
+              {(transaction || isAdmin) && (
                 <div className="mb-6">
-                  {/* Borrowers have no Transactions screen to open it in. */}
-                  <TransactionRow
-                    t={transaction}
-                    onOpen={isBorrower ? undefined : () => router.push(`/transactions?txn=${transaction.transaction_id}`)}
-                  />
+                  {transaction && (
+                    // Borrowers have no Transactions screen to open it in.
+                    <TransactionRow
+                      t={transaction}
+                      onOpen={isBorrower ? undefined : () => router.push(`/transactions?txn=${transaction.transaction_id}`)}
+                    />
+                  )}
+                  {isAdmin && (
+                    <div className={`flex items-center gap-4 text-[13px] ${transaction ? "mt-2 px-1" : ""}`}>
+                      <button
+                        onClick={() => setPickingTransaction(true)}
+                        disabled={linkBusy}
+                        className="text-ink-soft hover:text-ink disabled:opacity-60"
+                      >
+                        {transaction ? "Change transaction" : "+ Link a transaction"}
+                      </button>
+                      {transaction && (
+                        <button
+                          onClick={() => linkTransaction(null)}
+                          disabled={linkBusy}
+                          className="text-ink-soft hover:text-rust disabled:opacity-60"
+                        >
+                          Unlink
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {linkError && !pickingTransaction && <p className="text-xs text-rust mt-2">{linkError}</p>}
                 </div>
               )}
 
@@ -313,6 +358,21 @@ export default function ConversationPage() {
           )}
         </div>
       </main>
+
+      {pickingTransaction && conversation && (
+        <TransactionPickerSheet
+          memberId={conversation.member_id}
+          memberName={memberName}
+          currentId={conversation.transaction_id}
+          busy={linkBusy}
+          error={linkError}
+          onPick={linkTransaction}
+          onClose={() => {
+            setPickingTransaction(false)
+            setLinkError("")
+          }}
+        />
+      )}
 
       {conversation && !loadError && (
         <div className="fixed inset-x-0 z-30 bg-paper border-t border-hairline" style={{ bottom: composerBottom }}>
@@ -368,5 +428,58 @@ export default function ConversationPage() {
         </div>
       )}
     </>
+  )
+}
+
+// The thread member's entries (and their loans'), newest first; tapping
+// one links it.
+function TransactionPickerSheet({
+  memberId,
+  memberName,
+  currentId,
+  busy,
+  error,
+  onPick,
+  onClose
+}: {
+  memberId: string
+  memberName: string
+  currentId: string | null
+  busy: boolean
+  error: string
+  onPick: (t: Txn) => void
+  onClose: () => void
+}) {
+  const [rows, setRows] = useState<Txn[] | null>(null)
+  const [loadError, setLoadError] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    listMemberTransactions(memberId).then(({ data, error }) => {
+      if (cancelled) return
+      if (error) setLoadError(error)
+      setRows(data.filter((t) => t.transaction_id !== currentId))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [memberId, currentId])
+
+  return (
+    <Sheet title={`Link ${memberName ? `${memberName}'s` : "a"} transaction`} onClose={onClose}>
+      {error && <p className="text-sm text-rust mb-3">{error}</p>}
+      {loadError && <p className="text-sm text-rust mb-3">Couldn&apos;t load transactions: {loadError}</p>}
+      {rows === null ? (
+        <SkeletonPanel />
+      ) : rows.length === 0 && !loadError ? (
+        <p className="text-sm text-ink-soft text-center py-8">No other transactions for this member.</p>
+      ) : (
+        <div className={`space-y-2 ${busy ? "opacity-60 pointer-events-none" : ""}`}>
+          {rows.map((t) => (
+            <TransactionRow key={t.transaction_id} t={t} onOpen={() => onPick(t)} />
+          ))}
+        </div>
+      )}
+    </Sheet>
   )
 }

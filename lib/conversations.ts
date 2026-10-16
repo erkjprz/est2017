@@ -134,6 +134,38 @@ export async function listTransactionConversations(transactionId: string) {
   return (data ?? []) as { id: string; subject: string; status: "open" | "closed"; last_message_at: string }[]
 }
 
+// Admin-only: link an existing thread to a transaction, or clear the link
+// with null. See the 20261016000003 migration.
+export async function setConversationTransaction(conversationId: string, transactionId: string | null) {
+  return supabase.rpc("set_conversation_transaction", {
+    p_conversation_id: conversationId,
+    p_transaction_id: transactionId
+  })
+}
+
+// Candidates for linking to a member's thread: their own entries plus
+// every entry on a loan they hold or borrowed (as a member or through
+// their borrower record) -- the rows that member can be asked about.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function listMemberTransactions(memberId: string): Promise<{ data: any[]; error: string | null }> {
+  const { data: borrowers } = await supabase.from("borrowers").select("borrower_id").eq("member_id", memberId)
+  const borrowerIds = (borrowers ?? []).map((b) => b.borrower_id as string)
+  const { data: loans } = await supabase
+    .from("loans")
+    .select("loan_id")
+    .or([`member_id.eq.${memberId}`, ...(borrowerIds.length ? [`borrower_id.in.(${borrowerIds.join(",")})`] : [])].join(","))
+  const loanIds = (loans ?? []).map((l) => l.loan_id as string)
+  const { data, error } = await supabase
+    .from("transactions")
+    .select(LINKED_TRANSACTION_COLUMNS)
+    .or([`member_id.eq.${memberId}`, ...(loanIds.length ? [`loan_id.in.(${loanIds.join(",")})`] : [])].join(","))
+    .neq("status", "cancelled")
+    .order("txn_date", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(200)
+  return { data: data ?? [], error: error?.message ?? null }
+}
+
 export async function markConversationRead(conversationId: string) {
   return supabase.rpc("mark_conversation_read", { p_conversation_id: conversationId })
 }
