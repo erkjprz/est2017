@@ -342,7 +342,8 @@ export function ReceiptsField({
   existingPaths = [],
   onRemoveExisting,
   accept = "image/*",
-  emptyLabel = "Tap to upload a photo",
+  emptyLabel = "Tap to upload photos",
+  emptyHint = "You can add more than one",
   addLabel = "Add another photo",
   error
 }: {
@@ -353,6 +354,8 @@ export function ReceiptsField({
   onRemoveExisting?: (path: string) => void
   accept?: string
   emptyLabel?: string
+  // Second line under emptyLabel, so it's clear several files are fine.
+  emptyHint?: string
   addLabel?: string
   // Shown (with a red outline) once Submit has been tapped with no file.
   error?: string
@@ -436,7 +439,14 @@ export function ReceiptsField({
         }`}
       >
         <span className="text-base shrink-0">{hasAny ? "＋" : "📎"}</span>
-        <span className="text-sm text-ink-soft">{hasAny ? addLabel : emptyLabel}</span>
+        {hasAny ? (
+          <span className="text-sm text-ink-soft">{addLabel}</span>
+        ) : (
+          <span className="text-left">
+            <span className="block text-sm text-ink-soft">{emptyLabel}</span>
+            <span className="block text-[11px] text-ink-soft/70">{emptyHint}</span>
+          </span>
+        )}
         <input
           type="file"
           accept={accept}

@@ -1792,6 +1792,9 @@ export default function AdminPage() {
                   <span className="text-base shrink-0">{proofFiles.length > 0 ? "＋" : "📎"}</span>
                   <span className="flex-1 min-w-0 text-sm text-ink-soft">
                     <span className="block truncate">{proofFiles.length > 0 ? "Add another file" : "Proof of transfer"}</span>
+                    {proofFiles.length === 0 && (
+                      <span className="block text-[11px] text-ink-soft/70">Photos or PDFs — you can add more than one</span>
+                    )}
                     {showMissing && missingProof && <FieldError message="Attach proof of the transfer" className="mt-1" />}
                   </span>
                   <input

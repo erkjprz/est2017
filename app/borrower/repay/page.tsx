@@ -373,7 +373,7 @@ export default function BorrowerRepayPage() {
                   </div>
 
                   <div>
-                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipt</p>
+                    <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipts</p>
                     <ReceiptsField
                       files={receipts}
                       onAddFiles={(added) => setReceipts((prev) => [...prev, ...added])}
