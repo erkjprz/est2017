@@ -2247,6 +2247,9 @@ type Investment = {
 
 // Fund-wide list of investments, not scoped to a member.
 const INVESTMENTS_CACHE_KEY = "fund-breakdown:investments"
+// Cached alongside the list so a cached render never shows every
+// investment as fully undistributed while allocations are still loading.
+const INVESTMENT_ALLOCATIONS_CACHE_KEY = "fund-breakdown:investment-allocations"
 
 function InvestmentsPanel({
   isAdmin,
@@ -2273,7 +2276,11 @@ function InvestmentsPanel({
   // Signed gain/loss already split across members, per investment -- used
   // to show each card's "not yet distributed" line, and the admin-only
   // Needs distribution card.
-  const [allocatedById, setAllocatedById] = useState<Record<string, number>>({})
+  const cachedAllocations = readCache<Record<string, number>>(INVESTMENT_ALLOCATIONS_CACHE_KEY)
+  const [allocatedById, setAllocatedById] = useState<Record<string, number>>(cachedAllocations ?? {})
+  // False until allocations are known (cached or fetched) -- until then
+  // the undistributed figures would just be each investment's full gain/loss.
+  const [allocationsReady, setAllocationsReady] = useState(!!cachedAllocations)
 
   async function load() {
     // Only show the blocking loader on a true cold start -- if we already
@@ -2294,6 +2301,8 @@ function InvestmentsPanel({
         next[r.investment_id] = (next[r.investment_id] ?? 0) + signed
       }
       setAllocatedById(next)
+      setAllocationsReady(true)
+      writeCache(INVESTMENT_ALLOCATIONS_CACHE_KEY, next)
     }
 
     if (error) {
@@ -2347,7 +2356,7 @@ function InvestmentsPanel({
   // only counts once its realized gain exceeds what's been split (money
   // still out isn't a loss yet); a closed one counts if anything's left.
   const undistributedById: Record<string, number> = {}
-  for (const i of investments) {
+  for (const i of allocationsReady ? investments : []) {
     const unallocated = Number((i.gain_loss - (allocatedById[i.investment_id] ?? 0)).toFixed(2))
     if (i.status === "open" ? unallocated > 0.01 : Math.abs(unallocated) > 0.01) {
       undistributedById[i.investment_id] = unallocated
