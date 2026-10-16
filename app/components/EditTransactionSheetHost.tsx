@@ -1,8 +1,15 @@
 "use client"
 
 import { Suspense, useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { EditTransactionSheet } from "@/app/components/EditTransactionSheet"
+
+// Loaded on demand: this host sits in the root layout, so a static import
+// would ship the whole edit form to every page (/login included) even
+// though it only renders once a "?editTransaction=" link is followed.
+const EditTransactionSheet = dynamic(() =>
+  import("@/app/components/EditTransactionSheet").then((mod) => mod.EditTransactionSheet)
+)
 
 // Mounted once at the root layout so any page can open the edit sheet --
 // LoanCards (used on /borrower, which has no Navbar/FAB) and the

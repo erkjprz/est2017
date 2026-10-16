@@ -90,6 +90,14 @@ export async function fetchTransactionsFields() {
   // legacy migrated transfers instead used two separate rows with the
   // plain `bank` text column and null bank_account_id/to_bank_account_id.
   //
+  // Columns are listed rather than `*`: the table still carries spreadsheet-
+  // import leftovers (reason, source_sheet, source_row, legacy_id,
+  // confidence, original_date) that nothing in the app reads, and they were
+  // ~15% of this payload -- which is downloaded whole and also kept in
+  // localStorage. Add a column here if a list, filter, detail sheet, or
+  // EditTransactionSheet (seeded from these rows via transactionRowCache)
+  // starts reading one.
+  //
   // .range() is required: without an explicit range, PostgREST applies its
   // own default row cap (1000), which silently truncates the result. 4999
   // comfortably covers current volume; if the table keeps growing, switch
@@ -102,10 +110,12 @@ export async function fetchTransactionsFields() {
       .from("transactions")
       .select(
         `
-        *,
+        transaction_id, txn_date, created_at, description, amount, bank, member_id, loan_id,
+        investment_id, classification, affects_cash, status, submitted_by, receipt_url, receipt_urls,
+        bank_account_id, to_bank_account_id, interest_distributed, is_closing_distribution,
+        rejection_reason, payout_details, payout_qr_path, resubmitted_at, previous_amount,
         members!transactions_member_id_fkey (
-          name,
-          email
+          name
         ),
         submitted_by_member:members!transactions_submitted_by_fkey (
           name

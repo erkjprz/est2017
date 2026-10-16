@@ -1,15 +1,23 @@
 "use client"
 
 import { Suspense, useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/app/auth-context"
 import { NotificationBell } from "@/app/components/NotificationBell"
 import { ChatButton } from "@/app/components/ChatButton"
 import { useHydrated } from "@/lib/useHydrated"
-import { NewTransactionSheet } from "@/app/components/NewTransactionSheet"
 import { Toast } from "@/app/components/Toast"
 import { notifyTransactionsChanged } from "@/lib/transactionEvents"
 import { loadTransactionFormData } from "@/lib/transactionFormPrefetch"
+
+// Split out of the shared bundle -- it's only rendered once the FAB is
+// tapped, so there's no reason for every page to download it up front.
+// Navbar preloads it in the background once a member is signed in (see
+// below), so the first tap doesn't wait on the download either.
+const loadNewTransactionSheet = () =>
+  import("@/app/components/NewTransactionSheet").then((mod) => mod.NewTransactionSheet)
+const NewTransactionSheet = dynamic(loadNewTransactionSheet)
 
 // Same reduced fraction budget-tracker's BottomNav uses -- a floating pill
 // inset from the edge only needs a little clearance from the home
@@ -127,6 +135,15 @@ export default function Navbar() {
   useEffect(() => {
     if (!member) return
     loadTransactionFormData(member.member_id, member.role === "admin")
+    // Same idea for the sheet's code, but at idle time so it never
+    // competes with the page's own first render.
+    const preload = () => void loadNewTransactionSheet()
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(preload, { timeout: 3000 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const id = setTimeout(preload, 1500)
+    return () => clearTimeout(id)
   }, [member])
 
   // Pages reserve bottom padding (--dock-h) to clear whichever floating
