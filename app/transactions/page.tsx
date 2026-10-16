@@ -134,8 +134,8 @@ function SearchBox({ onDebouncedChange }: { onDebouncedChange: (value: string) =
       {showHint && (
         <p className="mt-2 text-xs text-ink-soft">
           Matches member names, banks, descriptions, loan/investment names, transaction types, and dates.
-          Multiple words narrow the results -- e.g. "Vhan BDO" finds Vhan's transactions on BDO, even
-          though the two words aren't next to each other on the card.
+          Multiple words narrow the results -- e.g. &quot;Vhan BDO&quot; finds Vhan&apos;s transactions on BDO, even
+          though the two words aren&apos;t next to each other on the card.
         </p>
       )}
     </div>
@@ -295,6 +295,7 @@ function TransactionsPageInner() {
       return
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once the auth check above passes
     load()
   }, [authLoading, member, router, load])
 
@@ -556,7 +557,7 @@ function TransactionsPageInner() {
 
           {loadError && (
             <p className="mt-4 text-sm text-rust">
-              Couldn't load transactions: {loadError}
+              Couldn&apos;t load transactions: {loadError}
             </p>
           )}
 

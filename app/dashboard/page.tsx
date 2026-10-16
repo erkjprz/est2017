@@ -103,6 +103,7 @@ export default function DashboardPage() {
       return
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once the auth check above passes
     loadDashboard()
   }, [authLoading, member, router, loadDashboard])
 
@@ -160,7 +161,7 @@ export default function DashboardPage() {
 
           {loadError && (
             <p className="mt-2 mb-4 text-sm text-rust">
-              Couldn't load some dashboard data: {loadError}
+              Couldn&apos;t load some dashboard data: {loadError}
             </p>
           )}
 

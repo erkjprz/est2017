@@ -16,7 +16,6 @@ import { listTransactionConversations } from "@/lib/conversations"
 
 // A loaded transactions row with its joined member/loan/investment/bank
 // fields -- the page has always handled these untyped.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Txn = any
 
 export const typeColor: Record<string, string> = {

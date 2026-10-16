@@ -361,7 +361,7 @@ const memberSections: FaqSection[] = [
         a: (
           <p>
             Open the menu (☰, top left) → <strong>Appearance</strong>, at the bottom of the menu. Pick{" "}
-            <strong>System</strong> to match your device's setting automatically, or lock it to{" "}
+            <strong>System</strong> to match your device&apos;s setting automatically, or lock it to{" "}
             <strong>Light</strong>/<strong>Dark</strong>.
           </p>
         )
@@ -785,6 +785,7 @@ export default function HelpPage() {
   // sticks.
   useEffect(() => {
     if (tabInitialized || !member) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- defaults the tab to the viewer's role once, the first time it's known
     setActiveTab(member.role === "borrower" ? "borrowers" : member.role === "admin" ? "admin" : "members")
     setTabInitialized(true)
   }, [member, tabInitialized])
@@ -854,7 +855,7 @@ export default function HelpPage() {
           <h1 className="font-display text-4xl font-semibold">Help</h1>
           <p className="text-sm text-ink-soft mt-2 max-w-md">
             Est. 2017 is meant to be simple enough to use without a manual. This is here for whenever you want a
-            quick refresher, organized by what you're trying to do.
+            quick refresher, organized by what you&apos;re trying to do.
           </p>
 
           {tabs.length > 1 && (

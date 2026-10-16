@@ -361,7 +361,7 @@ export function LoanDetailPanel({
   if (notFound || !loan) {
     return (
       <div>
-        <p className="text-sm text-ink-soft">This loan couldn't be found.</p>
+        <p className="text-sm text-ink-soft">This loan couldn&apos;t be found.</p>
         <button onClick={onBack} className="mt-4 text-sm font-medium text-gold">
           ← Back to Loans
         </button>

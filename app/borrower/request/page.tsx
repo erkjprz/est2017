@@ -81,6 +81,7 @@ export default function BorrowerRequestLoanPage() {
       return
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- auth gate with nothing to fetch -- ready once the check passes
     setDataLoading(false)
   }, [authLoading, member, router])
 

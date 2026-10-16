@@ -59,7 +59,6 @@ function PhotoThumb({ attachment, onOpen }: { attachment: ChatAttachment; onOpen
       aria-label={`Open ${attachment.name}`}
     >
       {url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset
         <img src={url} alt={attachment.name} className="w-full max-h-64 object-cover" />
       ) : (
         <span className="block w-full h-40 animate-pulse" />
@@ -108,7 +107,6 @@ function PhotoViewer({ url, name, onClose }: { url: string; name: string; onClos
       >
         ✕
       </button>
-      {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL, not a static asset */}
       <img src={url} alt={name} className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
     </div>
   )
@@ -138,7 +136,6 @@ export function PendingAttachments({ files, onRemove }: { files: File[]; onRemov
           className="relative shrink-0 w-[72px] h-[72px] rounded-md overflow-hidden border border-hairline bg-paper"
         >
           {previews[i] ? (
-            // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
             <img src={previews[i]!} alt={file.name} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-end gap-0.5 px-1.5 pb-1.5">

@@ -95,7 +95,7 @@ export async function loadTransactionFormData(
 
   const myLoans = loans ?? []
   const loanIds = myLoans.map((l) => l.loan_id)
-  let loanRepaidTotals: Record<string, number> = {}
+  const loanRepaidTotals: Record<string, number> = {}
   if (loanIds.length > 0) {
     const { data: repayments } = await supabase
       .from("transactions")

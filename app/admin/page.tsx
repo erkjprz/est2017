@@ -414,6 +414,7 @@ export default function AdminPage() {
     }
 
     checkAdminAccess()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData is recreated every render; this should only re-run when auth changes
   }, [authLoading, member, router])
 
   // ?signup= (the Members page's "Review signup") and ?review= (a pending
@@ -425,6 +426,7 @@ export default function AdminPage() {
     const id = params.get("signup")
     const txnId = params.get("review")
     if (!id && !txnId) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opens the review sheet a ?signup= / ?review= link asked for, once the queue has loaded
     if (id && pendingMembers.some((m) => m.member_id === id)) setReviewingSignupId(id)
     else if (id && borrowerMembers.some((m) => m.member_id === id && m.status === "pending")) setReviewingBorrowerId(id)
     if (txnId && pendingTransactions.some((t) => t.transaction_id === txnId)) setReviewingTxnId(txnId)

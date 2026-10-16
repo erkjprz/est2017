@@ -89,7 +89,7 @@ export default function BorrowerPage() {
 
           <ScanToPayCard />
 
-          {loadError && <p className="mb-4 text-sm text-rust">Couldn't load your loans: {loadError}</p>}
+          {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load your loans: {loadError}</p>}
 
           {!loadError && <LoanCards loans={loans} editable />}
         </div>

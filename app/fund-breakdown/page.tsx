@@ -428,6 +428,7 @@ function useMemberBreakdown(memberId: string, includeTrend: boolean) {
     return () => {
       cancelled = true
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitted: the left-out values are fallbacks/cache data, and depending on them would refetch in a loop
   }, [memberId, includeTrend])
 
   return { dataLoading, performance, years, trend, loadError }
@@ -521,7 +522,7 @@ function YouPanel({ memberId }: { memberId: string }) {
 
   return (
     <div>
-      {loadError && <p className="mb-4 text-sm text-rust">Couldn't load some of this breakdown: {loadError}</p>}
+      {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load some of this breakdown: {loadError}</p>}
 
       {performance != null && (
         <div className="card p-5">
@@ -597,7 +598,7 @@ function YouPanel({ memberId }: { memberId: string }) {
         <h2 className="font-display text-lg font-medium text-ink mb-1">By Year</h2>
         <p className="text-[13px] text-ink-soft mb-3">
           Contributions, withdrawals, bank interest, loan gain share, and investment gain/loss, by calendar year.
-          Investment allocations aren't dated individually, so each is counted in the year of that investment's most
+          Investment allocations aren&apos;t dated individually, so each is counted in the year of that investment&apos;s most
           recent transaction.
         </p>
 
@@ -779,6 +780,7 @@ function GroupPanel() {
     return () => {
       cancelled = true
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omitted: the left-out values are fallbacks/cache data, and depending on them would refetch in a loop
   }, [])
 
   const fmt = (n: number) =>
@@ -836,7 +838,7 @@ function GroupPanel() {
         Ownership based on net contribution, investment performance, bank interest, and loan gain share.
       </p>
 
-      {loadError && <p className="mb-4 text-sm text-rust">Couldn't load the fund breakdown: {loadError}</p>}
+      {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load the fund breakdown: {loadError}</p>}
 
       {members.length > 0 && (
         <div className="card px-5 py-4 mb-6">
@@ -909,7 +911,7 @@ function GroupPanel() {
                   ₱{fmt(fund.open_loans_outstanding)}
                 </span>
               </div>
-              <p className="text-[11px] text-ink-soft pt-1">Doesn't include interest owed.</p>
+              <p className="text-[11px] text-ink-soft pt-1">Doesn&apos;t include interest owed.</p>
             </InfoBox>
           )}
 
@@ -1669,7 +1671,7 @@ function LoansPanel({
         </div>
       )}
 
-      {loadError && <p className="mb-4 text-sm text-rust">Couldn't load loans: {loadError}</p>}
+      {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load loans: {loadError}</p>}
 
       {!loadError && loans.length === 0 && (
         <p className="text-sm text-ink-soft text-center py-12">No loans on record yet.</p>
@@ -2034,8 +2036,8 @@ function BanksPanel({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once on mount
     load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fmt = (n: number) =>
@@ -2078,7 +2080,7 @@ function BanksPanel({
           Only Add Bank, which has no bank to live on yet, stays here, on the
           same row as the intro so it doesn't sit alone on a line of its own. */}
       <div className="flex items-center justify-between gap-4 mb-5">
-        <p className="text-[13px] text-ink-soft">Where the fund's cash sits, and the interest each account has earned.</p>
+        <p className="text-[13px] text-ink-soft">Where the fund&apos;s cash sits, and the interest each account has earned.</p>
         {isAdmin && (
           <button
             className="shrink-0 bg-gold-soft text-ink px-3.5 py-2 rounded-sm text-sm font-semibold shadow-sm hover:opacity-90 transition-opacity flex items-center gap-1.5"
@@ -2152,7 +2154,7 @@ function BanksPanel({
         </div>
       )}
 
-      {loadError && <p className="mb-4 text-sm text-rust">Couldn't load banks: {loadError}</p>}
+      {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load banks: {loadError}</p>}
 
       {!loadError && banks.length === 0 && (
         <p className="text-sm text-ink-soft text-center py-12">No bank accounts on record yet.</p>
@@ -2306,6 +2308,7 @@ function InvestmentsPanel({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once on mount
     load()
   }, [])
 
@@ -2444,7 +2447,7 @@ function InvestmentsPanel({
         </div>
       )}
 
-      {loadError && <p className="mb-4 text-sm text-rust">Couldn't load investments: {loadError}</p>}
+      {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load investments: {loadError}</p>}
 
       {!loadError && investments.length === 0 && (
         <p className="text-sm text-ink-soft text-center py-12">No investments on record yet.</p>

@@ -97,6 +97,7 @@ export default function AdminMembersPage() {
       return
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once the auth check above passes
     loadMembers()
     reloadLoans()
   }, [authLoading, authMember, router, reloadLoans])
