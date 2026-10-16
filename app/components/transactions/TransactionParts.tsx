@@ -307,19 +307,13 @@ export function TransactionDetailSheet({
   if (reviewInQueue)
     links.push({ label: "Review in Admin queue", hint: "Approve or reject this entry", onClick: () => router.push(`/admin?review=${t.transaction_id}`) })
 
-  // Starting a chat about this row. Members ask the admins; admins message
-  // whoever the row belongs to (the member, or a loan's borrower), so rows
-  // with nobody on the other side (bank interest, expenses) get no entry.
-  const recipientId: string | null = isAdmin ? t.member_id ?? t.loans?.borrowers?.member_id ?? null : memberId ?? null
-  const recipientName: string | null = t.members?.name ?? t.loans?.borrowers?.name ?? null
-  if (recipientId && !(isAdmin && recipientId === memberId))
-    links.push({
-      label: isAdmin ? `Message ${recipientName ?? "member"}` : "Ask about this",
-      hint: isAdmin ? "Start a conversation about this entry" : "Send the admins a question about this entry",
-      onClick: () => router.push(`/messages?txn=${t.transaction_id}${isAdmin ? `&to=${recipientId}` : ""}`)
-    })
-
-  const [threads, setThreads] = useState<Awaited<ReturnType<typeof listTransactionConversations>>>([])
+  // Chats about this row. An existing thread with the person on the other
+  // side is opened rather than offering to start a second one; otherwise
+  // members ask the admins, and admins message whoever the row belongs to
+  // (the member, or a loan's borrower) -- rows with nobody on the other
+  // side (bank interest, expenses) get no entry. Held back until the
+  // threads have loaded, so it doesn't flash up and then vanish.
+  const [threads, setThreads] = useState<Awaited<ReturnType<typeof listTransactionConversations>> | null>(null)
   useEffect(() => {
     let cancelled = false
     listTransactionConversations(t.transaction_id).then((rows) => {
@@ -329,11 +323,20 @@ export function TransactionDetailSheet({
       cancelled = true
     }
   }, [t.transaction_id])
-  for (const c of threads)
+  for (const c of threads ?? [])
     links.push({
-      label: c.subject,
-      hint: `Conversation${c.status === "closed" ? " · closed" : ""}`,
+      label: "Open conversation",
+      hint: `${c.subject}${c.status === "closed" ? " · closed" : ""}`,
       onClick: () => router.push(`/messages/${c.id}`)
+    })
+
+  const recipientId: string | null = isAdmin ? t.member_id ?? t.loans?.borrowers?.member_id ?? null : memberId ?? null
+  const recipientName: string | null = t.members?.name ?? t.loans?.borrowers?.name ?? null
+  if (threads && recipientId && !(isAdmin && recipientId === memberId) && !threads.some((c) => c.member_id === recipientId))
+    links.push({
+      label: isAdmin ? `Message ${recipientName ?? "member"}` : "Ask about this",
+      hint: isAdmin ? "Start a conversation about this entry" : "Send the admins a question about this entry",
+      onClick: () => router.push(`/messages?txn=${t.transaction_id}${isAdmin ? `&to=${recipientId}` : ""}`)
     })
 
   const fromBank = bankAccountLabel(t.from_bank_account) || t.bank || null
