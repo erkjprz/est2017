@@ -1566,9 +1566,15 @@ function LoansPanel({
   }
 
   const openLoans = loans.filter((l) => l.status !== "closed")
+  // A requested loan hasn't been released yet -- nothing is owed until it
+  // is, so it stays out of Outstanding and its total (the fund's own
+  // totals only count active loans too). Admins see it under Needs action;
+  // everyone else gets a separate Requested list.
+  const requestedLoans = openLoans.filter((l) => l.status === "requested")
+  const outstandingLoans = openLoans.filter((l) => l.status !== "requested")
   const closedLoans = loans.filter((l) => l.status === "closed")
   const totalInterestEarned = closedLoans.reduce((sum, l) => sum + l.gain, 0)
-  const totalOutstanding = openLoans.reduce((sum, l) => sum + l.outstanding, 0)
+  const totalOutstanding = outstandingLoans.reduce((sum, l) => sum + l.outstanding, 0)
 
   // Admin-only to-do list: loans waiting on a release, loans repaid in full
   // and ready to close, and loans behind on payments. Each row opens the
@@ -1607,7 +1613,7 @@ function LoansPanel({
             ₱{fmt(totalOutstanding)}
           </p>
           <p className="text-[11px] text-ink-soft mt-1">
-            across {openLoans.length} outstanding loan{openLoans.length === 1 ? "" : "s"}
+            across {outstandingLoans.length} outstanding loan{outstandingLoans.length === 1 ? "" : "s"}
           </p>
 
           {closedLoans.length > 0 && (
@@ -1669,11 +1675,29 @@ function LoansPanel({
         <p className="text-sm text-ink-soft text-center py-12">No loans on record yet.</p>
       )}
 
-      {openLoans.length > 0 && (
+      {!isAdmin && requestedLoans.length > 0 && (
+        <section className="mb-7">
+          <h2 className="text-[11px] uppercase tracking-[0.1em] text-ink-soft font-mono mb-3">Requested</h2>
+          <div className="flex flex-col gap-3">
+            {requestedLoans.map((loan) => (
+              <LoanCard
+                key={loan.loan_id}
+                loan={loan}
+                meta={loanStatusMeta(loan)}
+                fmt={fmt}
+                isMine={loan.borrower_member_id === myMemberId}
+                onClick={() => openLoan(loan.loan_id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {outstandingLoans.length > 0 && (
         <section className="mb-7">
           <h2 className="text-[11px] uppercase tracking-[0.1em] text-ink-soft font-mono mb-3">Outstanding</h2>
           <div className="flex flex-col gap-3">
-            {openLoans.map((loan) => (
+            {outstandingLoans.map((loan) => (
               <LoanCard
                 key={loan.loan_id}
                 loan={loan}
@@ -1827,6 +1851,14 @@ function LoanCard({
               }`}
             >
               {loan.gain >= 0 ? "+" : "-"}₱{fmt(Math.abs(loan.gain))}
+            </p>
+          </div>
+        ) : loan.status === "requested" ? (
+          // Nothing's owed until it's released -- show what will be.
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-wide text-ink-soft font-mono">To repay</p>
+            <p className="font-mono [font-variant-numeric:tabular-nums] text-sm font-semibold text-ink-soft">
+              ₱{fmt(loan.total_repayable)}
             </p>
           </div>
         ) : (
