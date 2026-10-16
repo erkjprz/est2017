@@ -6,25 +6,37 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Testing against the real Supabase project
 
-This app's only Supabase project is production — there is no separate
+This app's only Supabase project is production -- there is no separate
 staging database. Real members (including admins with push notifications
 enabled) can be notified by test activity if you're not careful.
 
-Before any test action that could touch a real-user-visible table
-(creating a member/auth user, submitting a transaction, anything that
-can cascade into `public.notifications`), disable the delivery trigger
-first, run the test, then **re-enable it immediately after** — don't
-leave it disabled for an extended session, since that also silences
-real notifications for real members' actual activity in the meantime:
+**Read `docs/TESTING.md` before any test that touches the database or signs
+in.** It has the full runbook: what can notify people, the forced-rollback
+dry-run pattern for DB changes, creating/using/removing the test account, and
+local build gotchas. The essentials:
+
+- Three channels reach real people: web push (`trg_dispatch_push_notification`
+  on `public.notifications`), Telegram (`trg_notify_telegram_transaction_insert`
+  on `public.transactions`), and the `loan-payment-reminders` cron job.
+- Prefer tests that write nothing: dry-run DB changes inside a transaction that
+  ends in `raise exception`, and validate queries with the publishable key.
+- Disable a delivery trigger only *inside the same transaction* as the action
+  that fires it, and re-enable it before `commit` -- never leave it off across
+  steps, since that silences real members' notifications too:
 
 ```sql
+begin;
 alter table public.notifications disable trigger trg_dispatch_push_notification;
--- ...do the test action...
+-- ...the test write...
 alter table public.notifications enable trigger trg_dispatch_push_notification;
+commit;
 ```
 
-This only suppresses the push/delivery side effect — rows still land in
-`public.notifications` normally, which is fine (delete any test-created
-rows afterward, e.g. `where member_id = '<test member id>'`). Test members
-created for this purpose should also be named/flagged obviously (e.g.
-"Claude Test Agent") so a stray one is easy to spot and remove.
+- Test accounts are named "Claude Test Agent" (`claude-test-agent@example.invalid`),
+  `gain_sharing_eligible = false`, and are used read-only. Delete them and any
+  rows they caused (including the "New Signup" notifications sent to admins)
+  when done.
+- The Supabase MCP tools hold `DELETE`/`DROP` for a confirmation that times out
+  -- don't work around it. Disable the test account instead (`status =
+  'inactive'`, banned login) and hand the user the cleanup SQL from
+  `docs/TESTING.md`.
