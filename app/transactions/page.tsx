@@ -156,7 +156,14 @@ function TransactionsPageInner() {
   const { loading: authLoading, member } = useAuth()
   const hydrated = useHydrated()
   const isAdmin = member?.role === "admin"
-  const cached = readCache<TransactionsSnapshot>(TRANSACTIONS_CACHE_KEY)
+  // Read once per mount: the snapshot holds the full history (~1MB of JSON),
+  // so parsing it inline on every render made each filter change, search,
+  // and scroll-to-load-more pay for a full JSON.parse of it again.
+  const [cached] = useState(() => readCache<TransactionsSnapshot>(TRANSACTIONS_CACHE_KEY))
+  // Whether a list is already on screen (cached or freshly loaded), so a
+  // background refresh doesn't flash back to the skeleton -- tracked here
+  // rather than by re-reading the cache, which would mean parsing it again.
+  const hasDataRef = useRef(!!cached)
 
   // Paints instantly from whatever was last loaded here, before the browser
   // ever shows a frame -- the load() effect below still runs right after
@@ -247,9 +254,10 @@ function TransactionsPageInner() {
     // Only show the blocking loader on a true cold start -- if we already
     // rendered cached data, refresh quietly behind it instead of flashing
     // back to a spinner on every navigation.
-    if (!readCache(TRANSACTIONS_CACHE_KEY)) setDataLoading(true)
+    if (!hasDataRef.current) setDataLoading(true)
 
     const { transactions: loadedTransactions, members: loadedMembers, error } = await fetchTransactionsFields()
+    hasDataRef.current = true
     setLoadError(error ?? "")
     setTransactions(loadedTransactions)
     setTotalCount(loadedTransactions.length)

@@ -1,14 +1,33 @@
 "use client"
 
 import { Suspense, useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { EditTransactionSheet } from "@/app/components/EditTransactionSheet"
+import { useAuth } from "@/app/auth-context"
+import { whenIdle } from "@/lib/whenIdle"
+
+// Loaded on demand: this host sits in the root layout, so a static import
+// would ship the whole edit form to every page (/login included) even
+// though it only renders once a "?editTransaction=" link is followed. Once
+// someone is signed in, the host preloads it at idle (see below) so the
+// first Edit tap doesn't wait on the download.
+const loadEditTransactionSheet = () =>
+  import("@/app/components/EditTransactionSheet").then((mod) => mod.EditTransactionSheet)
+const EditTransactionSheet = dynamic(loadEditTransactionSheet)
 
 // Mounted once at the root layout so any page can open the edit sheet --
 // LoanCards (used on /borrower, which has no Navbar/FAB) and the
 // Transactions list both need this, and the FAB's own NewTransactionSheet
 // only lives in Navbar, which borrowers never see.
 export function EditTransactionSheetHost() {
+  const { member } = useAuth()
+  const signedIn = !!member
+
+  useEffect(() => {
+    if (!signedIn) return
+    return whenIdle(() => void loadEditTransactionSheet())
+  }, [signedIn])
+
   return (
     <Suspense fallback={null}>
       <EditTransactionSheetWatcher />
