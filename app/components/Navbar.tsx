@@ -10,6 +10,7 @@ import { useHydrated } from "@/lib/useHydrated"
 import { Toast } from "@/app/components/Toast"
 import { notifyTransactionsChanged } from "@/lib/transactionEvents"
 import { loadTransactionFormData } from "@/lib/transactionFormPrefetch"
+import { whenIdle } from "@/lib/whenIdle"
 
 // Split out of the shared bundle -- it's only rendered once the FAB is
 // tapped, so there's no reason for every page to download it up front.
@@ -137,13 +138,7 @@ export default function Navbar() {
     loadTransactionFormData(member.member_id, member.role === "admin")
     // Same idea for the sheet's code, but at idle time so it never
     // competes with the page's own first render.
-    const preload = () => void loadNewTransactionSheet()
-    if ("requestIdleCallback" in window) {
-      const id = window.requestIdleCallback(preload, { timeout: 3000 })
-      return () => window.cancelIdleCallback(id)
-    }
-    const id = setTimeout(preload, 1500)
-    return () => clearTimeout(id)
+    return whenIdle(() => void loadNewTransactionSheet())
   }, [member])
 
   // Pages reserve bottom padding (--dock-h) to clear whichever floating
