@@ -8,10 +8,12 @@ import BorrowerHeader from "@/app/components/BorrowerHeader"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { AttachButton, MessageAttachments, PendingAttachments } from "@/app/components/ChatAttachments"
+import { TransactionRow, type Txn } from "@/app/components/transactions/TransactionParts"
 import {
   BODY_MAX,
   MESSAGE_COLUMNS,
   acceptChatFiles,
+  fetchLinkedTransaction,
   formatMessageTime,
   markConversationRead,
   removeChatAttachments,
@@ -25,6 +27,7 @@ type Conversation = {
   member_id: string
   subject: string
   status: "open" | "closed"
+  transaction_id: string | null
   created_at: string
 }
 
@@ -38,6 +41,7 @@ export default function ConversationPage() {
 
   const [conversation, setConversation] = useState<Conversation | null>(null)
   const [memberName, setMemberName] = useState("")
+  const [transaction, setTransaction] = useState<Txn | null>(null)
   const [messages, setMessages] = useState<ConversationMessage[]>([])
   // Sender names are only resolved for admins -- members just see "Admins"
   // on the other side, and borrowers can't read other members' rows anyway.
@@ -70,7 +74,7 @@ export default function ConversationPage() {
       const [convRes, msgRes] = await Promise.all([
         supabase
           .from("conversations")
-          .select("id, member_id, subject, status, created_at")
+          .select("id, member_id, subject, status, transaction_id, created_at")
           .eq("id", conversationId)
           .maybeSingle(),
         supabase
@@ -89,6 +93,8 @@ export default function ConversationPage() {
         setConversation(convRes.data as Conversation)
         setMessages(msgRes.data ?? [])
         markConversationRead(conversationId)
+        const txnId = (convRes.data as Conversation).transaction_id
+        if (txnId) fetchLinkedTransaction(txnId).then((t) => !cancelled && setTransaction(t))
       }
       setLoading(false)
     }
@@ -265,6 +271,16 @@ export default function ConversationPage() {
                   </button>
                 )}
               </div>
+
+              {transaction && (
+                <div className="mb-6">
+                  {/* Borrowers have no Transactions screen to open it in. */}
+                  <TransactionRow
+                    t={transaction}
+                    onOpen={isBorrower ? undefined : () => router.push(`/transactions?txn=${transaction.transaction_id}`)}
+                  />
+                </div>
+              )}
 
               <div className="space-y-3">
                 {messages.map((m) => {

@@ -9,12 +9,14 @@ import { Sheet } from "@/app/components/Sheet"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachments"
+import { TransactionRow, cardDate, describeTransaction, formatSigned, type Txn } from "@/app/components/transactions/TransactionParts"
 import { readCache, writeCache } from "@/lib/cache"
 import {
   ATTACHMENTS_MAX,
   BODY_MAX,
   SUBJECT_MAX,
   acceptChatFiles,
+  fetchLinkedTransaction,
   formatMessageTime,
   listConversations,
   startConversationWithAttachments,
@@ -24,7 +26,8 @@ import {
 type MemberOption = { member_id: string; name: string; role: string }
 
 // useSearchParams() (for the admin "?to=<memberId>" deep link from the
-// Members page) needs its own Suspense boundary -- same pattern as
+// Members page, and "?txn=<transactionId>" from a transaction's "Ask about
+// this") needs its own Suspense boundary -- same pattern as
 // EditTransactionSheetHost.
 export default function MessagesPage() {
   return (
@@ -55,6 +58,7 @@ function MessagesInbox() {
   // sheet stayed mounted invisibly over the page, blocking every tap.
   const [dismissedTo, setDismissedTo] = useState<string | null>(null)
   const preselectedMemberId = searchParams.get("to")
+  const linkedTransactionId = searchParams.get("txn")
 
   useEffect(() => {
     if (authLoading) return
@@ -85,14 +89,19 @@ function MessagesInbox() {
   // Admin deep link from the Members page opens the composer pre-filled
   // with that member. Closing it also drops the param in place (no
   // navigation) so a refresh doesn't reopen it.
-  const deepLinkTo = isAdmin && preselectedMemberId && preselectedMemberId !== dismissedTo ? preselectedMemberId : null
-  const compose =
-    newCompose !== null ? { key: `new-${newCompose}`, to: null } : deepLinkTo ? { key: `to-${deepLinkTo}`, to: deepLinkTo } : null
+  // A "?txn=" link opens it too, linked to that transaction (for anyone --
+  // members ask about a row, admins message its member about it).
+  const deepLinkKey = linkedTransactionId ? `txn-${linkedTransactionId}` : isAdmin && preselectedMemberId ? `to-${preselectedMemberId}` : null
+  const deepLink =
+    deepLinkKey && deepLinkKey !== dismissedTo
+      ? { key: deepLinkKey, to: isAdmin ? preselectedMemberId : null, txn: linkedTransactionId }
+      : null
+  const compose = newCompose !== null ? { key: `new-${newCompose}`, to: null, txn: null } : deepLink
 
   function closeCompose() {
     setNewCompose(null)
-    if (preselectedMemberId) {
-      setDismissedTo(preselectedMemberId)
+    if (deepLinkKey) {
+      setDismissedTo(deepLinkKey)
       window.history.replaceState(null, "", "/messages")
     }
   }
@@ -154,7 +163,7 @@ function MessagesInbox() {
             <button
               onClick={() => {
                 // Opening + New also retires a still-pending deep link.
-                if (preselectedMemberId) closeCompose()
+                if (deepLinkKey) closeCompose()
                 setNewCompose(Date.now())
               }}
               className="shrink-0 bg-gold-soft text-ink px-4 py-2.5 rounded-sm text-sm font-semibold"
@@ -234,6 +243,7 @@ function MessagesInbox() {
           isAdmin={isAdmin}
           selfId={member.member_id}
           preselectedMemberId={compose.to}
+          transactionId={compose.txn}
           onClose={closeCompose}
           onStarted={(id) => router.push(`/messages/${id}`)}
         />
@@ -246,12 +256,14 @@ function ComposeSheet({
   isAdmin,
   selfId,
   preselectedMemberId,
+  transactionId,
   onClose,
   onStarted
 }: {
   isAdmin: boolean
   selfId: string
   preselectedMemberId: string | null
+  transactionId: string | null
   onClose: () => void
   onStarted: (conversationId: string) => void
 }) {
@@ -262,6 +274,27 @@ function ComposeSheet({
   const [files, setFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
+  const [transaction, setTransaction] = useState<Txn | null>(null)
+
+  // The linked row is shown above the message, and names the thread until
+  // the sender types their own subject.
+  useEffect(() => {
+    if (!transactionId) return
+    let cancelled = false
+    fetchLinkedTransaction(transactionId).then((t) => {
+      if (cancelled) return
+      if (!t) {
+        setError("That transaction couldn't be found.")
+        return
+      }
+      setTransaction(t)
+      const v = describeTransaction(t)
+      setSubject((s) => s || `${v.typeLabel} · ${formatSigned(Number(t.amount), v.direction)} · ${cardDate(t)}`.slice(0, SUBJECT_MAX))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [transactionId])
 
   useEffect(() => {
     if (!isAdmin) return
@@ -275,13 +308,13 @@ function ComposeSheet({
   }, [isAdmin, selfId])
 
   const targetId = isAdmin ? recipientId : selfId
-  const canSend = !!targetId && subject.trim().length > 0 && (body.trim().length > 0 || files.length > 0) && !sending
+  const canSend = (!transactionId || !!transaction) && !!targetId && subject.trim().length > 0 && (body.trim().length > 0 || files.length > 0) && !sending
 
   async function send() {
     if (!canSend) return
     setSending(true)
     setError("")
-    const { data, error } = await startConversationWithAttachments(targetId, selfId, subject, body, files)
+    const { data, error } = await startConversationWithAttachments(targetId, selfId, subject, body, files, transaction?.transaction_id)
     if (error || !data) {
       setError(error ?? "Couldn't start the conversation.")
       setSending(false)
@@ -312,6 +345,12 @@ function ComposeSheet({
       }
     >
       <div className="space-y-3">
+        {transactionId && (
+          <div>
+            <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">About</span>
+            {transaction ? <TransactionRow t={transaction} /> : <div className="card h-[68px] animate-pulse" />}
+          </div>
+        )}
         {isAdmin && (
           <label className="block">
             <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">To</span>
