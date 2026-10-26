@@ -201,7 +201,9 @@ export function LoanTermsCard({
               onClick={() => setShowTermPicker(true)}
               className="flex-1 min-w-0 text-left text-sm"
             >
-              {termMonths ? (
+              {repaymentFrequency === "lump_sum" && dueDate ? (
+                <span className="text-ink">Until {longDate(dueDate)}</span>
+              ) : termMonths ? (
                 <span className="text-ink">
                   {termMonths} {termMonths === "1" ? "month" : "months"}
                 </span>
