@@ -10,7 +10,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { formatInterestLabel, durationLabel, paymentOverdueLabel, ordinalDay } from "@/lib/loanFormat"
+import { formatInterestLabel, durationLabel, paymentOverdueLabel, ordinalDay, longDate, lumpSumDueDate } from "@/lib/loanFormat"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { InfoBox, InfoRow } from "@/app/components/breakdown/InfoBox"
@@ -48,6 +48,7 @@ type Loan = {
   repayment_frequency: string | null
   last_repayment_date: string | null
   due_day: number | null
+  due_date: string | null
 }
 
 type GainShare = {
@@ -294,6 +295,8 @@ export function LoanDetailPanel({
       term_months: rawLoan.term_months,
       repayment_frequency: rawLoan.repayment_frequency ?? "monthly",
       due_day: rawLoan.due_day ?? null,
+      due_date: rawLoan.due_date ?? null,
+      start_date: rawLoan.start_date,
       notes: rawLoan.notes,
       disbursed,
       repaid,
@@ -417,6 +420,8 @@ export function LoanDetailPanel({
   const termLabel = loan.term_months
     ? `${loan.term_months} mo · ${loan.repayment_frequency === "lump_sum" ? "lump sum" : "monthly"}`
     : null
+  const lumpSumDue =
+    loan.repayment_frequency === "lump_sum" ? lumpSumDueDate(loan.start_date, loan.term_months, loan.due_date) : null
   const pendingRepayment = adminLoan?.pendingRepayment ?? 0
 
   // What this loan is waiting on an admin for, if anything. Mirrors the
@@ -556,6 +561,7 @@ export function LoanDetailPanel({
           {loan.repayment_frequency === "monthly" && loan.due_day != null && (
             <InfoRow label="Due date" value={`${ordinalDay(loan.due_day)} of each month`} />
           )}
+          {lumpSumDue && <InfoRow label="Due date" value={longDate(lumpSumDue)} />}
           {loan.notes && <InfoRow label="Notes" value={loan.notes} />}
         </InfoBox>
 

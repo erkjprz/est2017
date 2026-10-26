@@ -13,7 +13,8 @@ import {
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { ordinalDay } from "@/lib/loanFormat"
+import { longDate, lumpSumDueDate, monthsUntil, ordinalDay } from "@/lib/loanFormat"
+import { dateOnly } from "@/lib/currentValue"
 
 function isValidPositiveNumber(value: string, allowZero = false): boolean {
   if (!value.trim()) return false
@@ -44,6 +45,9 @@ export function LoanTermsCard({
   setRepaymentFrequency,
   dueDay,
   setDueDay,
+  dueDate,
+  setDueDate,
+  startDate,
   showErrors = false
 }: {
   amount: string
@@ -59,6 +63,13 @@ export function LoanTermsCard({
   setRepaymentFrequency: (v: string) => void
   dueDay: string
   setDueDay: (v: string) => void
+  // A lump sum's picked due date (YYYY-MM-DD), or "" for end of term.
+  dueDate: string
+  setDueDate: (v: string) => void
+  // What the term counts from -- the loan's start date, or today for a new
+  // request. The release moves it to the release day, but a picked due
+  // date stays put.
+  startDate?: string
   // Set once Submit/Continue was tapped with something missing -- each
   // empty term then shows what it needs (see FieldError).
   showErrors?: boolean
@@ -79,6 +90,20 @@ export function LoanTermsCard({
   // row over to the plain number input for direct typing.
   const [interestRateCustom, setInterestRateCustom] = useState(false)
   const [termCustom, setTermCustom] = useState(false)
+
+  const termStart = startDate ?? dateOnly(new Date())
+  const lumpSumDue =
+    repaymentFrequency === "lump_sum"
+      ? lumpSumDueDate(termStart, isValidPositiveNumber(termMonths) ? Number(termMonths) : null, dueDate)
+      : null
+
+  // A term and a picked due date are two ways of saying the same thing --
+  // choosing a term drops the date, and picking a date sets the term to
+  // the whole months up to it.
+  function chooseTerm(months: string) {
+    setTermMonths(months)
+    setDueDate("")
+  }
 
   const previewTotalRepayable =
     isValidPositiveNumber(amount) &&
@@ -194,7 +219,7 @@ export function LoanTermsCard({
                 step="1"
                 placeholder="Term, e.g. 6"
                 value={termMonths}
-                onChange={(e) => setTermMonths(e.target.value)}
+                onChange={(e) => chooseTerm(e.target.value)}
                 autoFocus
               />
               <span className="text-xs text-ink-soft shrink-0">months</span>
@@ -214,7 +239,10 @@ export function LoanTermsCard({
           <div className="flex-1 flex border border-hairline rounded-sm overflow-hidden">
             <button
               type="button"
-              onClick={() => setRepaymentFrequency("monthly")}
+              onClick={() => {
+                setRepaymentFrequency("monthly")
+                setDueDate("")
+              }}
               className={`flex-1 text-xs font-semibold py-2 transition-colors ${
                 repaymentFrequency === "monthly" ? "bg-ink text-paper" : "text-ink-soft"
               }`}
@@ -233,8 +261,29 @@ export function LoanTermsCard({
           </div>
         </FieldRow>
 
-        {/* Only monthly loans have a recurring due date -- a lump sum is
-            simply due at the end of the term. */}
+        {/* A lump sum is due once: at the end of the term unless a date is
+            picked here instead. */}
+        {repaymentFrequency === "lump_sum" && (
+          <FieldRow icon={<CalendarIcon />}>
+            <span className="text-sm text-ink-soft shrink-0">Due on</span>
+            <input
+              className={`${rowInputClass} text-right`}
+              type="date"
+              aria-label="Lump sum due date"
+              min={termStart}
+              value={lumpSumDue ?? ""}
+              onChange={(e) => {
+                const date = e.target.value
+                if (!date) return setDueDate("")
+                setDueDate(date)
+                setTermMonths(String(monthsUntil(termStart, date)))
+                setTermCustom(false)
+              }}
+            />
+          </FieldRow>
+        )}
+
+
         {repaymentFrequency === "monthly" && (
           <FieldRow icon={<CalendarIcon />} error={dueDayError}>
             <button
@@ -276,7 +325,11 @@ export function LoanTermsCard({
             </div>
             <div className="flex items-center justify-between px-4 py-3 bg-gold/10">
               <span className="text-sm text-ink-soft">
-                {repaymentFrequency === "monthly" ? `Per month × ${termMonths}` : `Due at ${termMonths} months`}
+                {repaymentFrequency === "monthly"
+                  ? `Per month × ${termMonths}`
+                  : lumpSumDue
+                    ? `Due ${longDate(lumpSumDue)}`
+                    : `Due at ${termMonths} months`}
               </span>
               <span className="text-sm font-semibold font-mono [font-variant-numeric:tabular-nums] text-ink">
                 ₱{fmt(previewPerInstallment)}
@@ -319,7 +372,7 @@ export function LoanTermsCard({
         value={termMonths}
         onClose={() => setShowTermPicker(false)}
         onSelect={(months) => {
-          setTermMonths(String(months))
+          chooseTerm(String(months))
           setTermCustom(false)
           setShowTermPicker(false)
         }}

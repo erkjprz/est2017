@@ -27,7 +27,7 @@ import {
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { ordinalDay, loanPickLabel } from "@/lib/loanFormat"
+import { longDate, ordinalDay, loanPickLabel } from "@/lib/loanFormat"
 import { fetchWithdrawable } from "@/lib/withdrawable"
 import { dateOnly } from "@/lib/currentValue"
 import { getCachedTransactionFormData, loadTransactionFormData } from "@/lib/transactionFormPrefetch"
@@ -142,6 +142,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   const [termMonths, setTermMonths] = useState("")
   const [repaymentFrequency, setRepaymentFrequency] = useState("monthly")
   const [dueDay, setDueDay] = useState("")
+  const [dueDate, setDueDate] = useState("")
   const [selectedLoanId, setSelectedLoanId] = useState("")
   const [showLoanPicker, setShowLoanPicker] = useState(false)
   const [showInvestmentPicker, setShowInvestmentPicker] = useState(false)
@@ -468,6 +469,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
     setTermMonths("")
     setRepaymentFrequency("monthly")
     setDueDay("")
+    setDueDate("")
     setPayoutDetails("")
     setPayoutQrFile(null)
     setShowErrors(false)
@@ -648,7 +650,8 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
         p_submitted_by: submittedByForOnBehalf,
         p_payout_details: payoutDetails,
         p_payout_qr_path: qrPath,
-        p_due_day: repaymentFrequency === "monthly" ? Number(dueDay) : null
+        p_due_day: repaymentFrequency === "monthly" ? Number(dueDay) : null,
+        p_due_date: repaymentFrequency === "lump_sum" && dueDate ? dueDate : null
       })
 
       setSubmitting(false)
@@ -1220,6 +1223,9 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                           setDueDay(v)
                           if (message === MISSING_DUE_DAY_MESSAGE) setMessage("")
                         }}
+                        dueDate={dueDate}
+                        setDueDate={setDueDate}
+                        startDate={txnDate}
                       />
                     </div>
 
@@ -1246,7 +1252,14 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                       label="Interest"
                       value={interestType === "rate" ? `${interestRate || 0}%` : `₱${fmt(Number(interestAmount) || 0)} fixed`}
                     />
-                    <ReviewRow label="Term" value={`${termMonths || 0} ${termMonths === "1" ? "month" : "months"}`} />
+                    <ReviewRow
+                      label={repaymentFrequency === "lump_sum" && dueDate ? "Due date" : "Term"}
+                      value={
+                        repaymentFrequency === "lump_sum" && dueDate
+                          ? longDate(dueDate)
+                          : `${termMonths || 0} ${termMonths === "1" ? "month" : "months"}`
+                      }
+                    />
                     <ReviewRow
                       label="Repayment"
                       value={repaymentFrequency === "monthly" ? "Monthly installments" : "Lump sum at end of term"}

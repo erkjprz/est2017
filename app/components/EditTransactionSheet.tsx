@@ -31,7 +31,8 @@ import { InvestmentPickerSheet, InvestmentRowIcon } from "@/app/components/Inves
 import { InterestRatePickerSheet } from "@/app/components/InterestRatePickerSheet"
 import { TermPickerSheet } from "@/app/components/TermPickerSheet"
 import { DueDayPickerSheet } from "@/app/components/DueDayPickerSheet"
-import { ordinalDay, loanPickLabel } from "@/lib/loanFormat"
+import { longDate, lumpSumDueDate, monthsUntil, ordinalDay, loanPickLabel } from "@/lib/loanFormat"
+import { dateOnly } from "@/lib/currentValue"
 import { notifyTransactionsChanged } from "@/lib/transactionEvents"
 import { getCachedTransactionRow } from "@/lib/transactionRowCache"
 import { getCachedTransactionFormData } from "@/lib/transactionFormPrefetch"
@@ -127,6 +128,9 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
   const [termMonths, setTermMonths] = useState("")
   const [repaymentFrequency, setRepaymentFrequency] = useState("monthly")
   const [dueDay, setDueDay] = useState("")
+  // A lump sum's picked due date, and the start date its term counts from.
+  const [dueDate, setDueDate] = useState("")
+  const [loanStartDate, setLoanStartDate] = useState("")
   // Picker sheets replace plain <select>/<input> for these four fields,
   // matching NewTransactionSheet's pattern -- interestRateCustom/termCustom
   // default to false (picker-driven) same as there, regardless of whether
@@ -320,6 +324,8 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
         setTermMonths(loanRecord.term_months != null ? String(loanRecord.term_months) : "")
         setRepaymentFrequency(loanRecord.repayment_frequency ?? "monthly")
         setDueDay(loanRecord.due_day != null ? String(loanRecord.due_day) : "")
+        setDueDate(loanRecord.due_date ?? "")
+        setLoanStartDate(loanRecord.start_date ?? "")
       } else {
         setLoanId(txn.loan_id ?? "")
         setAmount(String(Math.abs(Number(txn.amount))))
@@ -424,6 +430,12 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
     previewTotalRepayable && isValidPositiveNumber(termMonths) && repaymentFrequency === "monthly"
       ? previewTotalRepayable / Number(termMonths)
       : previewTotalRepayable
+
+  const lumpSumStart = loanStartDate || dateOnly(new Date())
+  const lumpSumDue =
+    repaymentFrequency === "lump_sum"
+      ? lumpSumDueDate(lumpSumStart, isValidPositiveNumber(termMonths) ? Number(termMonths) : null, dueDate)
+      : null
 
   const fmt = (n: number) =>
     Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -563,6 +575,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
           term_months: Number(termMonths),
           repayment_frequency: repaymentFrequency,
           due_day: repaymentFrequency === "monthly" && dueDay ? Number(dueDay) : null,
+          due_date: repaymentFrequency === "lump_sum" && dueDate ? dueDate : null,
           notes: description
         })
         .eq("loan_id", loanId)
@@ -1098,7 +1111,10 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                           step="1"
                           placeholder="Term, e.g. 6"
                           value={termMonths}
-                          onChange={(e) => setTermMonths(e.target.value)}
+                          onChange={(e) => {
+                            setTermMonths(e.target.value)
+                            setDueDate("")
+                          }}
                           autoFocus
                         />
                         <span className="text-xs text-ink-soft shrink-0">months</span>
@@ -1118,7 +1134,10 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                     <div className="flex-1 flex border border-hairline rounded-sm overflow-hidden">
                       <button
                         type="button"
-                        onClick={() => setRepaymentFrequency("monthly")}
+                        onClick={() => {
+                          setRepaymentFrequency("monthly")
+                          setDueDate("")
+                        }}
                         className={`flex-1 text-xs font-semibold py-2 transition-colors ${
                           repaymentFrequency === "monthly" ? "bg-ink text-paper" : "text-ink-soft"
                         }`}
@@ -1136,6 +1155,26 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                       </button>
                     </div>
                   </FieldRow>
+
+                  {repaymentFrequency === "lump_sum" && (
+                    <FieldRow icon={<CalendarIcon />}>
+                      <span className="text-sm text-ink-soft shrink-0">Due on</span>
+                      <input
+                        className={`${rowInputClass} text-right`}
+                        type="date"
+                        aria-label="Lump sum due date"
+                        min={lumpSumStart}
+                        value={lumpSumDue ?? ""}
+                        onChange={(e) => {
+                          const date = e.target.value
+                          if (!date) return setDueDate("")
+                          setDueDate(date)
+                          setTermMonths(String(monthsUntil(lumpSumStart, date)))
+                          setTermCustom(false)
+                        }}
+                      />
+                    </FieldRow>
+                  )}
 
                   {repaymentFrequency === "monthly" && (
                     <FieldRow icon={<CalendarIcon />}>
@@ -1171,7 +1210,11 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                       </div>
                       <div className="flex items-center justify-between px-4 py-3 bg-gold/10">
                         <span className="text-sm text-ink-soft">
-                          {repaymentFrequency === "monthly" ? `Per month × ${termMonths}` : `Due at ${termMonths} months`}
+                          {repaymentFrequency === "monthly"
+                            ? `Per month × ${termMonths}`
+                            : lumpSumDue
+                              ? `Due ${longDate(lumpSumDue)}`
+                              : `Due at ${termMonths} months`}
                         </span>
                         <span className="text-sm font-semibold font-mono [font-variant-numeric:tabular-nums] text-ink">
                           ₱{fmt(previewPerInstallment)}
@@ -1210,7 +1253,10 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                       : `₱${fmt(Number(interestAmount) || 0)} fixed`
                   }
                 />
-                <ReviewRow label="Term" value={`${termMonths || 0} months`} />
+                <ReviewRow
+                  label={repaymentFrequency === "lump_sum" && dueDate ? "Due date" : "Term"}
+                  value={repaymentFrequency === "lump_sum" && dueDate ? longDate(dueDate) : `${termMonths || 0} months`}
+                />
                 <ReviewRow
                   label="Repayment"
                   value={repaymentFrequency === "monthly" ? "Monthly installments" : "Lump sum at end of term"}
@@ -1285,6 +1331,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
         onClose={() => setShowTermPicker(false)}
         onSelect={(months) => {
           setTermMonths(String(months))
+          setDueDate("")
           setTermCustom(false)
           setShowTermPicker(false)
         }}
