@@ -31,7 +31,7 @@ import { InvestmentPickerSheet, InvestmentRowIcon } from "@/app/components/Inves
 import { InterestRatePickerSheet } from "@/app/components/InterestRatePickerSheet"
 import { TermPickerSheet } from "@/app/components/TermPickerSheet"
 import { DueDayPickerSheet } from "@/app/components/DueDayPickerSheet"
-import { longDate, lumpSumDueDate, monthsUntil, ordinalDay, loanPickLabel } from "@/lib/loanFormat"
+import { daysTermLabel, longDate, lumpSumDueDate, monthsUntil, ordinalDay, loanPickLabel } from "@/lib/loanFormat"
 import { dateOnly } from "@/lib/currentValue"
 import { notifyTransactionsChanged } from "@/lib/transactionEvents"
 import { getCachedTransactionRow } from "@/lib/transactionRowCache"
@@ -1094,7 +1094,7 @@ export function EditTransactionSheet({ transactionId, onClose }: { transactionId
                         className="flex-1 min-w-0 text-left text-sm"
                       >
                         {repaymentFrequency === "lump_sum" && dueDate ? (
-                          <span className="text-ink">Until {longDate(dueDate)}</span>
+                          <span className="text-ink">{daysTermLabel(lumpSumStart, dueDate)}</span>
                         ) : termMonths ? (
                           <span className="text-ink">
                             {termMonths} {termMonths === "1" ? "month" : "months"}

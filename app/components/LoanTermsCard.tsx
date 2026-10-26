@@ -13,7 +13,7 @@ import {
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { longDate, lumpSumDueDate, monthsUntil, ordinalDay } from "@/lib/loanFormat"
+import { daysTermLabel, lumpSumDueDate, longDate, monthsUntil, ordinalDay } from "@/lib/loanFormat"
 import { dateOnly } from "@/lib/currentValue"
 
 function isValidPositiveNumber(value: string, allowZero = false): boolean {
@@ -202,7 +202,7 @@ export function LoanTermsCard({
               className="flex-1 min-w-0 text-left text-sm"
             >
               {repaymentFrequency === "lump_sum" && dueDate ? (
-                <span className="text-ink">Until {longDate(dueDate)}</span>
+                <span className="text-ink">{daysTermLabel(termStart, dueDate)}</span>
               ) : termMonths ? (
                 <span className="text-ink">
                   {termMonths} {termMonths === "1" ? "month" : "months"}

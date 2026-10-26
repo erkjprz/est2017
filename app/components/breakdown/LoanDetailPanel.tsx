@@ -10,7 +10,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { formatInterestLabel, durationLabel, paymentOverdueLabel, ordinalDay, longDate, lumpSumDueDate } from "@/lib/loanFormat"
+import { formatInterestLabel, durationLabel, paymentOverdueLabel, ordinalDay, longDate, lumpSumDueDate, daysTermLabel } from "@/lib/loanFormat"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
 import { InfoBox, InfoRow } from "@/app/components/breakdown/InfoBox"
@@ -417,11 +417,11 @@ export function LoanDetailPanel({
 
   const totalShared = shares.reduce((sum, s) => sum + s.amount, 0)
 
-  // A lump sum with a picked due date is described by that date (the Due
-  // date row), not the month count stored alongside it.
+  // A lump sum with a picked due date counts its term in days to that
+  // date, not the rounded-up month count stored alongside it.
   const termLabel =
     loan.repayment_frequency === "lump_sum" && loan.due_date
-      ? "lump sum"
+      ? `${daysTermLabel(loan.start_date, loan.due_date)} · lump sum`
       : loan.term_months
         ? `${loan.term_months} mo · ${loan.repayment_frequency === "lump_sum" ? "lump sum" : "monthly"}`
         : null

@@ -7,7 +7,7 @@ import Navbar from "@/app/components/Navbar"
 import { SkeletonCardList, SkeletonPanel } from "@/app/components/Skeleton"
 import { useAuth } from "@/app/auth-context"
 import type { InterestType } from "@/lib/loanMath"
-import { formatInterestLabel, durationLabel, longDate, paymentOverdueLabel } from "@/lib/loanFormat"
+import { formatInterestLabel, daysTermLabel, durationLabel, paymentOverdueLabel } from "@/lib/loanFormat"
 import { getPendingBankInterestGroups, isBankInterestDistributionDue } from "@/lib/bankInterest"
 import { LoanDetailPanel } from "@/app/components/breakdown/LoanDetailPanel"
 import { BankDetailPanel } from "@/app/components/breakdown/BankDetailPanel"
@@ -1465,7 +1465,7 @@ type Loan = {
 }
 
 function termLabel(loan: Loan): string | null {
-  if (loan.repayment_frequency === "lump_sum" && loan.due_date) return `due ${longDate(loan.due_date)}`
+  if (loan.repayment_frequency === "lump_sum" && loan.due_date) return daysTermLabel(loan.start_date, loan.due_date)
   return loan.term_months != null ? `${loan.term_months} mo` : null
 }
 
