@@ -120,3 +120,27 @@ export function loanPickLabel(principal: number, startDate: string, fmt: (n: num
   const date = new Date(`${startDate}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
   return `₱${fmt(principal)} loan · ${date}`
 }
+
+// When a lump-sum loan is due, as YYYY-MM-DD: its picked due date if it
+// has one, otherwise start date + term. Month-ends clamp the way Postgres
+// does (Jan 31 + 1 month = Feb 28), matching the payment reminders.
+export function lumpSumDueDate(startDate: string, termMonths: number | null, dueDate?: string | null): string | null {
+  if (dueDate) return dueDate
+  if (!termMonths) return null
+  const [y, m, d] = startDate.split("-").map(Number)
+  const lastDay = new Date(Date.UTC(y, m - 1 + termMonths + 1, 0)).getUTCDate()
+  return new Date(Date.UTC(y, m - 1 + termMonths, Math.min(d, lastDay))).toISOString().slice(0, 10)
+}
+
+// Whole months from startDate to dueDate (both YYYY-MM-DD), rounded up and
+// at least 1 -- the term stored alongside a picked lump-sum due date.
+export function monthsUntil(startDate: string, dueDate: string): number {
+  const [y1, m1, d1] = startDate.split("-").map(Number)
+  const [y2, m2, d2] = dueDate.split("-").map(Number)
+  return Math.max(1, (y2 - y1) * 12 + (m2 - m1) + (d2 > d1 ? 1 : 0))
+}
+
+// "15 Dec 2026", for a YYYY-MM-DD date.
+export function longDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+}

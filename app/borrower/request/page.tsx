@@ -20,7 +20,7 @@ import {
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { ordinalDay } from "@/lib/loanFormat"
+import { longDate, ordinalDay } from "@/lib/loanFormat"
 
 const MISSING_DUE_DAY_MESSAGE = "Pick the day of the month your payment is due."
 const MISSING_PAYOUT_MESSAGE = "Add your bank or e-wallet details, or a QR code, so we know where to send the money."
@@ -47,6 +47,7 @@ export default function BorrowerRequestLoanPage() {
   const [termMonths, setTermMonths] = useState("")
   const [repaymentFrequency, setRepaymentFrequency] = useState("monthly")
   const [dueDay, setDueDay] = useState("")
+  const [dueDate, setDueDate] = useState("")
   const [description, setDescription] = useState("")
   // Where the admin should send the money: typed bank/e-wallet details,
   // a photo of the borrower's payment QR code, or both.
@@ -193,7 +194,8 @@ export default function BorrowerRequestLoanPage() {
       p_description: description,
       p_payout_details: payoutDetails,
       p_payout_qr_path: qrPath,
-      p_due_day: repaymentFrequency === "monthly" ? Number(dueDay) : null
+      p_due_day: repaymentFrequency === "monthly" ? Number(dueDay) : null,
+      p_due_date: repaymentFrequency === "lump_sum" && dueDate ? dueDate : null
     })
 
     setSubmitting(false)
@@ -300,6 +302,8 @@ export default function BorrowerRequestLoanPage() {
                     setDueDay(v)
                     if (message === MISSING_DUE_DAY_MESSAGE) setMessage("")
                   }}
+                  dueDate={dueDate}
+                  setDueDate={setDueDate}
                 />
 
                 <div>
@@ -340,7 +344,10 @@ export default function BorrowerRequestLoanPage() {
                   label="Interest"
                   value={interestType === "rate" ? `${interestRate || 0}%` : `₱${fmt(Number(interestAmount) || 0)} fixed`}
                 />
-                <ReviewRow label="Term" value={`${termMonths || 0} months`} />
+                <ReviewRow
+                  label={repaymentFrequency === "lump_sum" && dueDate ? "Due date" : "Term"}
+                  value={repaymentFrequency === "lump_sum" && dueDate ? longDate(dueDate) : `${termMonths || 0} months`}
+                />
                 <ReviewRow
                   label="Repayment"
                   value={repaymentFrequency === "monthly" ? "Monthly installments" : "Lump sum at end of term"}

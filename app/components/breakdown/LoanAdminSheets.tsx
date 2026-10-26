@@ -30,6 +30,8 @@ export type AdminLoan = {
   term_months: number | null
   repayment_frequency: string
   due_day: number | null
+  due_date: string | null
+  start_date: string
   notes: string | null
   disbursed: number
   repaid: number
@@ -79,6 +81,7 @@ export function EditLoanTermsSheet({
   const [termMonths, setTermMonths] = useState(String(adminLoan.term_months ?? ""))
   const [repaymentFrequency, setRepaymentFrequency] = useState(adminLoan.repayment_frequency)
   const [dueDay, setDueDay] = useState(adminLoan.due_day != null ? String(adminLoan.due_day) : "")
+  const [dueDate, setDueDate] = useState(adminLoan.due_date ?? "")
   const [notes, setNotes] = useState(adminLoan.notes ?? "")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -97,6 +100,7 @@ export function EditLoanTermsSheet({
         term_months: Number(termMonths),
         repayment_frequency: repaymentFrequency,
         due_day: repaymentFrequency === "monthly" && dueDay ? Number(dueDay) : null,
+        due_date: repaymentFrequency === "lump_sum" && dueDate ? dueDate : null,
         notes
       }
 
@@ -185,6 +189,9 @@ export function EditLoanTermsSheet({
           setRepaymentFrequency={setRepaymentFrequency}
           dueDay={dueDay}
           setDueDay={setDueDay}
+          dueDate={dueDate}
+          setDueDate={setDueDate}
+          startDate={adminLoan.start_date}
         />
 
         <div>

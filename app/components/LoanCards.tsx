@@ -7,7 +7,7 @@ import { Sheet } from "@/app/components/Sheet"
 import { ReviewRow } from "@/app/components/TransactionFormUI"
 import { ReceiptThumbs } from "@/app/components/admin/ReceiptThumb"
 import { receiptPaths } from "@/lib/receiptUrl"
-import { formatInterestLabel, nextDueDate, paymentOverdueLabel } from "@/lib/loanFormat"
+import { formatInterestLabel, lumpSumDueDate, nextDueDate, paymentOverdueLabel } from "@/lib/loanFormat"
 import { TRANSACTION_TYPE_LABELS } from "@/lib/transactionLabels"
 import type { Loan, LoanTransaction } from "@/lib/useLoansSummary"
 import { cacheTransactionRow } from "@/lib/transactionRowCache"
@@ -89,11 +89,10 @@ export function nextPayment(loan: Loan): NextPayment | null {
   return { kind: "due", amount: remaining, dueLabel: lumpSumDueLabel(loan), overdue }
 }
 
-// A lump sum is due at the end of the term.
+// A lump sum is due on its picked date, or else at the end of the term.
 function lumpSumDueLabel(loan: Loan): string | null {
-  if (!loan.term_months) return null
-  const [y, m, d] = loan.start_date.split("-").map(Number)
-  return shortDate(Date.UTC(y, m - 1 + loan.term_months, d))
+  const due = lumpSumDueDate(loan.start_date, loan.term_months, loan.due_date)
+  return due ? shortDate(Date.parse(`${due}T00:00:00Z`)) : null
 }
 
 // The "Next payment" box under a loan's progress bar -- also used by the
