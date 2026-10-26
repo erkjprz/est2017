@@ -417,9 +417,14 @@ export function LoanDetailPanel({
 
   const totalShared = shares.reduce((sum, s) => sum + s.amount, 0)
 
-  const termLabel = loan.term_months
-    ? `${loan.term_months} mo · ${loan.repayment_frequency === "lump_sum" ? "lump sum" : "monthly"}`
-    : null
+  // A lump sum with a picked due date is described by that date (the Due
+  // date row), not the month count stored alongside it.
+  const termLabel =
+    loan.repayment_frequency === "lump_sum" && loan.due_date
+      ? "lump sum"
+      : loan.term_months
+        ? `${loan.term_months} mo · ${loan.repayment_frequency === "lump_sum" ? "lump sum" : "monthly"}`
+        : null
   const lumpSumDue =
     loan.repayment_frequency === "lump_sum" ? lumpSumDueDate(loan.start_date, loan.term_months, loan.due_date) : null
   const pendingRepayment = adminLoan?.pendingRepayment ?? 0
