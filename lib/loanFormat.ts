@@ -144,3 +144,10 @@ export function monthsUntil(startDate: string, dueDate: string): number {
 export function longDate(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
 }
+
+// A lump sum's term when it has a picked due date: the days from start to
+// due date ("2 days", "45 days") rather than the rounded-up month count.
+export function daysTermLabel(startDate: string, dueDate: string): string {
+  const days = Math.max(0, Math.round((Date.parse(`${dueDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86400000))
+  return `${days} ${days === 1 ? "day" : "days"}`
+}
