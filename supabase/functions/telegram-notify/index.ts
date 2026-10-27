@@ -115,6 +115,14 @@ const EVENT_HEADLINE: Record<string, string> = {
   released: "✅ <b>Loan Released</b>"
 }
 
+// 'released' is only fired for loans by the trigger, but an admin can send
+// it for a Member Withdrawal too (e.g. one reclassified from a loan after
+// its loan release went out) -- headline it as what it is, not a loan.
+function headlineFor(classification: string, event: string) {
+  if (event === "released" && classification === "Member Withdrawal") return "✅ <b>Withdrawal Released</b>"
+  return EVENT_HEADLINE[event] ?? EVENT_HEADLINE.submitted
+}
+
 // A pending Loan Release is still only a request -- nothing has been
 // disbursed until it's approved -- so say so in the first message.
 function labelFor(classification: string, event: string) {
@@ -147,7 +155,7 @@ Deno.serve(async (req: Request) => {
   const classification = labelFor(String(record.classification), event)
   const amount = formatAmount(Number(record.amount))
 
-  const headline = EVENT_HEADLINE[event] ?? EVENT_HEADLINE.submitted
+  const headline = headlineFor(String(record.classification), event)
   const lines = [headline, `${escapeHtml(classification)} — ${amount}`]
 
   const details = await describeTransaction(record)
