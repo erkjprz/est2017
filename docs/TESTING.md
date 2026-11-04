@@ -19,6 +19,7 @@ three things deliver:
 | Web push | `trg_dispatch_push_notification` on every insert into `public.notifications` | disable that trigger |
 | Telegram | `trg_notify_telegram_transaction_insert` on every insert into `public.transactions` | disable that trigger |
 | Loan reminders | the `loan-payment-reminders` cron job (`send_loan_payment_reminders()`) | don't create test loans; if one is unavoidable, see below |
+| Telegram (overdue loans) | `trg_notify_telegram_loan_overdue` on inserts into `public.loan_payment_reminders` with `kind = 'overdue'` | don't call `send_loan_payment_reminders()` or insert into that table in tests |
 
 Triggers that *write* notification rows (and so cascade into push):
 new signups (`trg_notify_admins_member_pending`), pending/resubmitted
@@ -42,7 +43,8 @@ leave a trigger disabled across tool calls. Afterwards, confirm it's back on:
 
 ```sql
 select tgname, tgenabled from pg_trigger
-where tgname in ('trg_dispatch_push_notification', 'trg_notify_telegram_transaction_insert');
+where tgname in ('trg_dispatch_push_notification', 'trg_notify_telegram_transaction_insert',
+                 'trg_notify_telegram_loan_overdue');
 -- tgenabled must be 'O' (enabled)
 ```
 
