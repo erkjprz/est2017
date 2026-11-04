@@ -130,6 +130,68 @@ function labelFor(classification: string, event: string) {
   return CLASSIFICATION_LABEL[classification] ?? classification
 }
 
+function formatDate(value: string) {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC"
+  })
+}
+
+// Sent by notify_telegram_loan_overdue when send_loan_payment_reminders logs
+// an overdue reminder -- the same day the borrower gets the in-app/push one.
+// Built from v_loan_summary so the group sees the loan as it stands today.
+async function describeOverdueLoan(record: Record<string, unknown>) {
+  const { data: loan } = await supabase
+    .from("v_loan_summary")
+    .select("loan, borrower, repayment_frequency, term_months, total_repayable, outstanding, start_date, last_repayment_date")
+    .eq("loan_id", record.loan_id)
+    .maybeSingle()
+  if (!loan) return null
+
+  const outstanding = Number(loan.outstanding)
+  const installment = loan.repayment_frequency === "monthly" && loan.term_months
+    ? Math.min(outstanding, Math.round((Number(loan.total_repayable) / loan.term_months) * 100) / 100)
+    : outstanding
+
+  const today = String(record.due_date)
+  const since = String(loan.last_repayment_date ?? loan.start_date)
+  const days = Math.round((Date.parse(today) - Date.parse(since)) / 86_400_000)
+
+  const lines = [
+    "⏰ <b>Loan Payment Overdue</b>",
+    `${escapeHtml(String(loan.loan))} — ${formatAmount(installment)} ${loan.repayment_frequency === "monthly" ? "monthly payment" : "payment"}`
+  ]
+  if (loan.borrower) lines.push(`Borrower: ${escapeHtml(String(loan.borrower))}`)
+  lines.push(`Outstanding: ${formatAmount(outstanding)}`)
+  lines.push(loan.last_repayment_date
+    ? `Last payment: ${formatDate(String(loan.last_repayment_date))} (${days} days ago)`
+    : `No payments since release on ${formatDate(String(loan.start_date))} (${days} days ago)`)
+  return lines.join("\n")
+}
+
+async function sendTelegram(text: string) {
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: CHAT_ID,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true
+    })
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    console.error("Telegram API error", res.status, body)
+    return new Response("Telegram send failed", { status: 502 })
+  }
+
+  return new Response("ok", { status: 200 })
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 })
@@ -152,6 +214,12 @@ Deno.serve(async (req: Request) => {
     return new Response("Bad request", { status: 400 })
   }
 
+  if (event === "loan_overdue") {
+    const text = await describeOverdueLoan(record)
+    if (!text) return new Response("Loan not found", { status: 404 })
+    return sendTelegram(text)
+  }
+
   const classification = labelFor(String(record.classification), event)
   const amount = formatAmount(Number(record.amount))
 
@@ -163,24 +231,5 @@ Deno.serve(async (req: Request) => {
 
   if (record.description) lines.push(`Note: ${escapeHtml(String(record.description))}`)
 
-  const text = lines.join("\n")
-
-  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: CHAT_ID,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true
-    })
-  })
-
-  if (!res.ok) {
-    const body = await res.text()
-    console.error("Telegram API error", res.status, body)
-    return new Response("Telegram send failed", { status: 502 })
-  }
-
-  return new Response("ok", { status: 200 })
+  return sendTelegram(lines.join("\n"))
 })
