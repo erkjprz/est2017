@@ -95,7 +95,8 @@ export default function NotificationsPage() {
     }
   }
 
-  const Header = member?.role === "borrower" ? BorrowerHeader : Navbar
+  const isBorrower = member?.role === "borrower"
+  const Header = isBorrower ? BorrowerHeader : Navbar
 
   if (authLoading || !member || member.status !== "approved" || dataLoading) {
     return (
@@ -115,6 +116,13 @@ export default function NotificationsPage() {
       <Header />
       <main className="min-h-screen bg-paper text-ink font-sans overflow-x-hidden">
         <div className="max-w-3xl mx-auto px-4 sm:px-5 pt-8 pb-[calc(3rem+var(--dock-h)+env(safe-area-inset-bottom))]">
+          <button
+            onClick={() => router.push(isBorrower ? "/borrower" : "/menu")}
+            className="text-[13px] text-ink-soft mb-4 hover:text-ink transition-colors"
+          >
+            {isBorrower ? "← Your Loan" : "← Menu"}
+          </button>
+
           <div className="text-[11px] tracking-[0.18em] uppercase text-gold font-mono mb-2">Activity</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-1">Notifications</h1>
           <p className="text-[13px] text-ink-soft mb-6">Everything Est. 2017 has sent you, newest first.</p>
