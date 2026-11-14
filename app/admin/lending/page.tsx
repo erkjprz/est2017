@@ -132,7 +132,6 @@ export default function LendingLimitsPage() {
             ← Administration
           </button>
 
-          <div className="text-[11px] tracking-[0.18em] uppercase text-gold font-mono mb-2">Admins only</div>
           <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-6">Lending limits</h1>
 
           {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load: {loadError}</p>}
