@@ -1462,6 +1462,7 @@ type Loan = {
   last_repayment_date: string | null
   due_day: number | null
   due_date: string | null
+  payments_start_date: string | null
 }
 
 function termLabel(loan: Loan): string | null {
@@ -1587,7 +1588,7 @@ function LoansPanel({
     ? openLoans.flatMap((l) => {
         if (l.status === "requested") return [{ loan: l, label: "Awaiting release", tone: "text-ink-soft" }]
         if (l.status === "active" && l.outstanding <= 0) return [{ loan: l, label: "Ready to close", tone: "text-sage" }]
-        const overdue = paymentOverdueLabel(l.status, l.repayment_frequency, l.start_date, l.last_repayment_date, l.due_day)
+        const overdue = paymentOverdueLabel(l.status, l.repayment_frequency, l.start_date, l.last_repayment_date, l.due_day, l.payments_start_date)
         return overdue ? [{ loan: l, label: overdue, tone: "text-rust" }] : []
       })
     : []
@@ -1788,7 +1789,8 @@ function LoanCard({
     loan.repayment_frequency,
     loan.start_date,
     loan.last_repayment_date,
-    loan.due_day
+    loan.due_day,
+    loan.payments_start_date
   )
 
   const subtitleParts = [

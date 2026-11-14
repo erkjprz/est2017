@@ -13,7 +13,7 @@ import {
   rowInputClass
 } from "@/app/components/TransactionFormUI"
 import { totalRepayable, type InterestType } from "@/lib/loanMath"
-import { daysTermLabel, lumpSumDueDate, longDate, monthsUntil, ordinalDay } from "@/lib/loanFormat"
+import { dayOfMonth, daysTermLabel, lumpSumDueDate, longDate, monthsUntil, ordinalDay } from "@/lib/loanFormat"
 import { dateOnly } from "@/lib/currentValue"
 
 function isValidPositiveNumber(value: string, allowZero = false): boolean {
@@ -48,6 +48,8 @@ export function LoanTermsCard({
   dueDate,
   setDueDate,
   startDate,
+  paymentsStart,
+  setPaymentsStart,
   showErrors = false
 }: {
   amount: string
@@ -70,6 +72,12 @@ export function LoanTermsCard({
   // request. The release moves it to the release day, but a picked due
   // date stays put.
   startDate?: string
+  // Admin-only: the first monthly payment, when it's later than the
+  // release (YYYY-MM-DD, or "" for "from release"). The row only shows
+  // when a setter is passed, so the borrower and member request forms
+  // never offer it. Picking a date also sets the due day to match.
+  paymentsStart?: string
+  setPaymentsStart?: (v: string) => void
   // Set once Submit/Continue was tapped with something missing -- each
   // empty term then shows what it needs (see FieldError).
   showErrors?: boolean
@@ -285,6 +293,35 @@ export function LoanTermsCard({
           </FieldRow>
         )}
 
+
+        {repaymentFrequency === "monthly" && setPaymentsStart && (
+          <FieldRow icon={<CalendarIcon />}>
+            <span className="text-sm text-ink-soft shrink-0">First payment</span>
+            <input
+              className={`${rowInputClass} text-right`}
+              type="date"
+              aria-label="First payment date"
+              value={paymentsStart ?? ""}
+              onChange={(e) => {
+                const date = e.target.value
+                setPaymentsStart(date)
+                if (date) setDueDay(String(dayOfMonth(date)))
+              }}
+            />
+            {paymentsStart ? (
+              <button
+                type="button"
+                onClick={() => setPaymentsStart("")}
+                aria-label="Clear first payment date"
+                className="text-ink-soft text-xs shrink-0 px-1"
+              >
+                ✕
+              </button>
+            ) : (
+              <span className="text-[11px] text-ink-soft shrink-0">from release</span>
+            )}
+          </FieldRow>
+        )}
 
         {repaymentFrequency === "monthly" && (
           <FieldRow icon={<CalendarIcon />} error={dueDayError}>
