@@ -28,7 +28,7 @@ export function FirstPaymentField({
       />
       <div className="pointer-events-none flex items-center gap-3 px-4 py-3.5 text-sm">
         <CalendarIcon />
-        <span className="flex-1 min-w-0 text-ink-soft">First payment</span>
+        <span className="flex-1 min-w-0 text-ink">First payment</span>
         {value ? (
           <span className="shrink-0 text-ink">{longDate(value)}</span>
         ) : (
