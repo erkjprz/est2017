@@ -4,6 +4,7 @@ import { useState } from "react"
 import { InterestRatePickerSheet } from "@/app/components/InterestRatePickerSheet"
 import { TermPickerSheet } from "@/app/components/TermPickerSheet"
 import { DueDayPickerSheet } from "@/app/components/DueDayPickerSheet"
+import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import {
   FieldRow,
   InterestIcon,
@@ -295,32 +296,13 @@ export function LoanTermsCard({
 
 
         {repaymentFrequency === "monthly" && setPaymentsStart && (
-          <FieldRow icon={<CalendarIcon />}>
-            <span className="text-sm text-ink-soft shrink-0">First payment</span>
-            <input
-              className={`${rowInputClass} text-right`}
-              type="date"
-              aria-label="First payment date"
-              value={paymentsStart ?? ""}
-              onChange={(e) => {
-                const date = e.target.value
-                setPaymentsStart(date)
-                if (date) setDueDay(String(dayOfMonth(date)))
-              }}
-            />
-            {paymentsStart ? (
-              <button
-                type="button"
-                onClick={() => setPaymentsStart("")}
-                aria-label="Clear first payment date"
-                className="text-ink-soft text-xs shrink-0 px-1"
-              >
-                ✕
-              </button>
-            ) : (
-              <span className="text-[11px] text-ink-soft shrink-0">from release</span>
-            )}
-          </FieldRow>
+          <FirstPaymentField
+            value={paymentsStart ?? ""}
+            onChange={(date) => {
+              setPaymentsStart(date)
+              if (date) setDueDay(String(dayOfMonth(date)))
+            }}
+          />
         )}
 
         {repaymentFrequency === "monthly" && (
