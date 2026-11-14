@@ -265,7 +265,7 @@ export default function LendingLimitsPage() {
                 </div>
                 <p className="mt-2 px-1 text-[11px] text-ink-soft">
                   Money on hold for loans and investments, as a share of each member&apos;s own value. Limit{" "}
-                  {pct(limits.max_member_hold_pct)}. Never blocks a withdrawal.
+                  {pct(limits.max_member_hold_pct)}.
                 </p>
               </section>
             </div>
