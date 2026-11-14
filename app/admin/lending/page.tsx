@@ -19,7 +19,9 @@ const fmt = (n: number) =>
   Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const pct = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
 
-const sectionLabelClass = "text-[11px] uppercase tracking-[0.1em] text-ink-soft font-mono mb-2 px-1"
+const sectionLabelClass = "text-[11px] uppercase tracking-[0.1em] text-ink-soft font-mono mb-1 px-1"
+// The short explanation under a section label, above its card.
+const sectionNoteClass = "text-[12px] text-ink-soft mb-2.5 px-1"
 
 type LimitField = "max_total_loans_pct" | "max_per_borrower_pct" | "max_member_hold_pct"
 
@@ -131,10 +133,7 @@ export default function LendingLimitsPage() {
           </button>
 
           <div className="text-[11px] tracking-[0.18em] uppercase text-gold font-mono mb-2">Admins only</div>
-          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-1">Lending limits</h1>
-          <p className="text-[13px] text-ink-soft mb-6">
-            Loan requests that would go over a limit get a warning in the queue. You can still approve them.
-          </p>
+          <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-6">Lending limits</h1>
 
           {loadError && <p className="mb-4 text-sm text-rust">Couldn&apos;t load: {loadError}</p>}
 
@@ -142,7 +141,6 @@ export default function LendingLimitsPage() {
             <div className="space-y-7">
               {/* ---- Where the fund stands ---- */}
               <section>
-                <p className={sectionLabelClass}>Right now</p>
                 <div className="card p-5">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-[13px] text-ink-soft">Available to lend</span>
@@ -167,14 +165,21 @@ export default function LendingLimitsPage() {
               {/* ---- The limits themselves ---- */}
               <section>
                 <p className={sectionLabelClass}>Limits</p>
+                <p className={sectionNoteClass}>Tap a number to change it, then Save.</p>
                 <div className="card divide-y divide-hairline">
                   {LIMIT_FIELDS.map(({ field, label, hint }) => (
-                    <label key={field} className="flex items-center gap-3 px-5 py-4">
+                    <label key={field} className="flex items-center gap-3 px-5 py-4 cursor-text">
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-semibold text-ink">{label}</span>
                         <span className="block text-[12px] text-ink-soft">Max {hint}</span>
                       </span>
-                      <span className="shrink-0 flex items-center gap-1">
+                      {/* A filled box with a gold edge reads as a field to type
+                          in; the old hairline outline looked like plain text. */}
+                      <span
+                        className={`shrink-0 flex items-center gap-1 rounded-lg border bg-paper px-3 py-2 focus-within:border-gold ${
+                          Number(draft[field]) !== limits[field] ? "border-gold" : "border-gold/40"
+                        }`}
+                      >
                         <input
                           type="number"
                           inputMode="decimal"
@@ -183,7 +188,8 @@ export default function LendingLimitsPage() {
                           step="any"
                           value={draft[field]}
                           onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
-                          className="w-16 bg-transparent border border-hairline rounded-md px-2 py-1.5 text-right font-mono text-sm text-ink focus:outline-none focus:border-gold"
+                          onFocus={(e) => e.target.select()}
+                          className="w-12 bg-transparent text-right font-mono text-base font-semibold text-ink focus:outline-none"
                           aria-label={`${label} limit, percent`}
                         />
                         <span className="font-mono text-sm text-ink-soft">%</span>
@@ -212,6 +218,9 @@ export default function LendingLimitsPage() {
               {/* ---- Borrowers ---- */}
               <section>
                 <p className={sectionLabelClass}>Borrowers</p>
+                <p className={sectionNoteClass}>
+                  Unpaid principal plus any pending request, as a share of the fund. Limit {pct(limits.max_per_borrower_pct)}.
+                </p>
                 {position.borrowers.length === 0 ? (
                   <div className="card px-5 py-4 text-[13px] text-ink-soft">No active or requested loans.</div>
                 ) : (
@@ -236,14 +245,15 @@ export default function LendingLimitsPage() {
                     })}
                   </div>
                 )}
-                <p className="mt-2 px-1 text-[11px] text-ink-soft">
-                  Unpaid principal plus any pending request, as a share of the fund. Limit {pct(limits.max_per_borrower_pct)}.
-                </p>
               </section>
 
               {/* ---- Member holds ---- */}
               <section>
                 <p className={sectionLabelClass}>Member holds</p>
+                <p className={sectionNoteClass}>
+                  Money on hold for loans and investments, as a share of each member&apos;s own value. Limit{" "}
+                  {pct(limits.max_member_hold_pct)}.
+                </p>
                 <div className="card divide-y divide-hairline">
                   {position.members.map((m) => {
                     const p = holdPct(m)
@@ -263,10 +273,6 @@ export default function LendingLimitsPage() {
                     )
                   })}
                 </div>
-                <p className="mt-2 px-1 text-[11px] text-ink-soft">
-                  Money on hold for loans and investments, as a share of each member&apos;s own value. Limit{" "}
-                  {pct(limits.max_member_hold_pct)}.
-                </p>
               </section>
             </div>
           )}
