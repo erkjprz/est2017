@@ -16,6 +16,7 @@ import { InvestmentDetailsSheet } from "@/app/components/breakdown/InvestmentAdm
 import { InvestmentDetailPanel } from "@/app/components/breakdown/InvestmentDetailPanel"
 import { InfoBox, InfoRow, InfoSubRow } from "@/app/components/breakdown/InfoBox"
 import { readCache, writeCache } from "@/lib/cache"
+import { policyPct, useLendingPolicy } from "@/lib/lendingPolicy"
 import {
   fetchGroupBreakdownFields,
   GROUP_CACHE_KEY,
@@ -436,6 +437,7 @@ function useMemberBreakdown(memberId: string, includeTrend: boolean) {
 
 function YouPanel({ memberId }: { memberId: string }) {
   const { dataLoading, performance, years, trend: myTrend, loadError } = useMemberBreakdown(memberId, true)
+  const policy = useLendingPolicy()
   const [yearIndex, setYearIndex] = useState(0)
   const yearTouchStartX = useRef<number | null>(null)
 
@@ -533,6 +535,11 @@ function YouPanel({ memberId }: { memberId: string }) {
           {performance.money_on_hold > 0 && (
             <p className="text-xs text-ink-soft -mt-3 mb-4">
               of ₱{fmt(performance.total_value)} total — ₱{fmt(performance.money_on_hold)} currently tied up in loans/investments
+              {policy && performance.total_value > 0 && (
+                <>
+                  {" "}({policyPct((performance.money_on_hold / performance.total_value) * 100)} · limit {policyPct(policy.maxMemberHoldPct)})
+                </>
+              )}
             </p>
           )}
           <div className="mb-4">
@@ -1510,6 +1517,9 @@ function LoansPanel({
   // Bumped by LoanDetailPanel after an admin action so the list (and its
   // Needs action card) is fresh when backing out of the loan.
   const [reloadKey, setReloadKey] = useState(0)
+  // Members' view of the lending limits -- percentages only, null for
+  // anyone get_lending_policy doesn't serve.
+  const policy = useLendingPolicy()
   // Restores the scroll position lost to LoanDetailPanel's own
   // scroll-to-top-on-open when the user backs out of it.
   const scrollPosRef = useRef(0)
@@ -1635,6 +1645,26 @@ function LoansPanel({
                 }`}
               >
                 {totalInterestEarned < 0 ? "-" : "+"}₱{fmt(Math.abs(totalInterestEarned))}
+              </p>
+            </div>
+          )}
+
+          {policy && (
+            <div className="mt-3.5 pt-3 border-t border-hairline">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[10px] uppercase tracking-wide text-ink-soft font-mono">Lending policy</p>
+                <p className="font-mono [font-variant-numeric:tabular-nums] text-[13px] text-ink">
+                  {policyPct(policy.loanedOutPct)} <span className="text-ink-soft">of {policyPct(policy.maxTotalLoansPct)}</span>
+                </p>
+              </div>
+              <div className="mt-1.5 h-1 rounded-full bg-hairline overflow-hidden">
+                <div
+                  className={`h-full ${policy.loanedOutPct > policy.maxTotalLoansPct ? "bg-rust" : "bg-gold"}`}
+                  style={{ width: `${Math.min(100, (policy.loanedOutPct / policy.maxTotalLoansPct) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-ink-soft mt-1.5">
+                Up to {policyPct(policy.maxTotalLoansPct)} of the fund on loan at once · {policyPct(policy.maxPerBorrowerPct)} max per borrower
               </p>
             </div>
           )}
