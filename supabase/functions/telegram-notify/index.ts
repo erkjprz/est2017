@@ -145,7 +145,7 @@ function formatDate(value: string) {
 async function describeOverdueLoan(record: Record<string, unknown>) {
   const { data: loan } = await supabase
     .from("v_loan_summary")
-    .select("loan, borrower, repayment_frequency, term_months, total_repayable, outstanding, start_date, last_repayment_date")
+    .select("loan, borrower, repayment_frequency, term_months, total_repayable, outstanding, start_date, last_repayment_date, payments_start_date")
     .eq("loan_id", record.loan_id)
     .maybeSingle()
   if (!loan) return null
@@ -156,7 +156,10 @@ async function describeOverdueLoan(record: Record<string, unknown>) {
     : outstanding
 
   const today = String(record.due_date)
-  const since = String(loan.last_repayment_date ?? loan.start_date)
+  // A loan whose payments start after the release counts from that first
+  // due date, not the release, when nothing has been paid yet.
+  const firstDue = loan.payments_start_date ? String(loan.payments_start_date) : null
+  const since = String(loan.last_repayment_date ?? firstDue ?? loan.start_date)
   const days = Math.round((Date.parse(today) - Date.parse(since)) / 86_400_000)
 
   const lines = [
@@ -167,7 +170,9 @@ async function describeOverdueLoan(record: Record<string, unknown>) {
   lines.push(`Outstanding: ${formatAmount(outstanding)}`)
   lines.push(loan.last_repayment_date
     ? `Last payment: ${formatDate(String(loan.last_repayment_date))} (${days} days ago)`
-    : `No payments since release on ${formatDate(String(loan.start_date))} (${days} days ago)`)
+    : firstDue
+      ? `No payments yet — first was due ${formatDate(firstDue)} (${days} days ago)`
+      : `No payments since release on ${formatDate(String(loan.start_date))} (${days} days ago)`)
   return lines.join("\n")
 }
 

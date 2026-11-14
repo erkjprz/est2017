@@ -51,15 +51,14 @@ export function paymentOverdueLabel(
   startDate: string,
   lastRepaymentDate: string | null,
   dueDay?: number | null,
+  paymentsStart?: string | null,
   today: Date = new Date()
 ): string | null {
   if (status !== "active" || repaymentFrequency !== "monthly") return null
 
-  const since = lastRepaymentDate ?? startDate
-
   if (dueDay) {
     const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
-    let due = nextDueDate(since, dueDay)
+    let due = firstUnpaidDueDate(lastRepaymentDate, startDate, paymentsStart, dueDay)
     let missed = 0
     while (due < todayUtc) {
       missed++
@@ -69,6 +68,12 @@ export function paymentOverdueLabel(
     return missed === 1 ? "Payment overdue" : `${missed} payments overdue`
   }
 
+  // With a later payments start, count as if released a month before it,
+  // so nothing reads overdue before the first payment is even due.
+  const since = [lastRepaymentDate ?? startDate, paymentsStart ? addDays(paymentsStart, -30) : null]
+    .filter((d): d is string => !!d)
+    .sort()
+    .pop()!
   const days = Math.round((today.getTime() - new Date(since).getTime()) / 86400000)
   if (days <= 45) return null
 
@@ -103,6 +108,36 @@ export function nextDueDate(from: string, dueDay: number): number {
     due = dueDateInMonth(year, month, dueDay)
   }
   return due
+}
+
+// The first due date still unpaid, in ms (UTC midnight): a loan's payments
+// start date until a payment covers it, then the usual next due date after
+// the last payment (see nextDueDate). A payment up to 15 days early counts
+// toward that first due date, the same tolerance every other due date gets.
+// Mirrors loan_first_unpaid_due in the database, which the payment
+// reminders use.
+export function firstUnpaidDueDate(
+  lastPaid: string | null,
+  startDate: string,
+  paymentsStart: string | null | undefined,
+  dueDay: number
+): number {
+  if (paymentsStart && (!lastPaid || lastPaid < addDays(paymentsStart, -15))) {
+    return Date.parse(`${paymentsStart}T00:00:00Z`)
+  }
+  return nextDueDate(lastPaid ?? startDate, dueDay)
+}
+
+// YYYY-MM-DD plus n days (n may be negative).
+export function addDays(date: string, n: number): string {
+  const [y, m, d] = date.split("-").map(Number)
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
+}
+
+// The day of the month of a YYYY-MM-DD date -- a payments start date sets
+// the loan's monthly due day to match.
+export function dayOfMonth(date: string): number {
+  return Number(date.split("-")[2])
 }
 
 // 1 -> "1st", 22 -> "22nd", 13 -> "13th" -- for a loan's monthly due day.

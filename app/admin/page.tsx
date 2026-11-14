@@ -17,6 +17,7 @@ import {
   PersonIcon,
   InterestIcon,
   ClockIcon,
+  CalendarIcon,
   FieldError,
   invalidRowClass,
   rowSelectClass,
@@ -29,6 +30,7 @@ import { receiptPaths, removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 import { approveLoanRelease } from "@/lib/approveLoan"
 import { approveBorrowerMember } from "@/lib/approveBorrower"
 import { dateOnly } from "@/lib/currentValue"
+import { dayOfMonth } from "@/lib/loanFormat"
 import { TRANSACTION_TYPE_LABELS as typeLabels } from "@/lib/transactionLabels"
 import { readCache, writeCache } from "@/lib/cache"
 import {
@@ -207,6 +209,8 @@ export default function AdminPage() {
   const [editInterestRate, setEditInterestRate] = useState<Record<string, string>>({})
   const [editInterestAmount, setEditInterestAmount] = useState<Record<string, string>>({})
   const [editTermMonths, setEditTermMonths] = useState<Record<string, string>>({})
+  // A monthly loan's first payment date, when later than the release.
+  const [editPaymentsStart, setEditPaymentsStart] = useState<Record<string, string>>({})
   const [savingEditId, setSavingEditId] = useState<string | null>(null)
 
   const [borrowerMembers, setBorrowerMembers] = useState<any[]>(cached?.borrowerMembers ?? [])
@@ -276,7 +280,7 @@ export default function AdminPage() {
           members!transactions_member_id_fkey ( name, email ),
           submitted_by_member:members!transactions_submitted_by_fkey ( name ),
           bank_accounts!transactions_bank_account_id_fkey ( bank_name, account_name ),
-          loans!transactions_loan_id_fkey ( interest_type, interest_rate, interest_amount, term_months, payout_details, payout_qr_path ),
+          loans!transactions_loan_id_fkey ( interest_type, interest_rate, interest_amount, term_months, repayment_frequency, due_day, payments_start_date, payout_details, payout_qr_path ),
           investments!transactions_investment_id_fkey ( name )
         `
         )
@@ -780,7 +784,7 @@ export default function AdminPage() {
       if (txnError) throw txnError
 
       if (t.classification === "Loan Release" && t.loan_id) {
-        const loanUpdate: Record<string, number> = { principal: newAmount }
+        const loanUpdate: Record<string, number | string | null> = { principal: newAmount }
 
         if (t.loans?.interest_type === "amount") {
           const v = editInterestAmount[id]
@@ -792,6 +796,14 @@ export default function AdminPage() {
 
         const termV = editTermMonths[id]
         if (termV !== undefined && termV !== "") loanUpdate.term_months = Number(termV)
+
+        // "" clears it back to "from release". A date also moves the
+        // monthly due day to that day, so reminders land on it.
+        const startV = editPaymentsStart[id]
+        if (startV !== undefined && t.loans?.repayment_frequency === "monthly") {
+          loanUpdate.payments_start_date = startV || null
+          if (startV) loanUpdate.due_day = dayOfMonth(startV)
+        }
 
         const { error: loanError } = await supabase.from("loans").update(loanUpdate).eq("loan_id", t.loan_id)
         if (loanError) throw loanError
@@ -807,6 +819,7 @@ export default function AdminPage() {
     setEditInterestRate((prev) => { const next = { ...prev }; delete next[id]; return next })
     setEditInterestAmount((prev) => { const next = { ...prev }; delete next[id]; return next })
     setEditTermMonths((prev) => { const next = { ...prev }; delete next[id]; return next })
+    setEditPaymentsStart((prev) => { const next = { ...prev }; delete next[id]; return next })
     loadData()
   }
 
@@ -1502,7 +1515,8 @@ export default function AdminPage() {
               (t.loans?.interest_type === "amount"
                 ? changed(editInterestAmount[id], t.loans?.interest_amount)
                 : changed(editInterestRate[id], t.loans?.interest_rate))) ||
-            (needsLoanBank && changed(editTermMonths[id], t.loans?.term_months)))
+            (needsLoanBank && changed(editTermMonths[id], t.loans?.term_months)) ||
+            (needsLoanBank && editPaymentsStart[id] !== undefined && editPaymentsStart[id] !== (t.loans?.payments_start_date ?? "")))
         const discardEdits = () => {
           const drop = (prev: Record<string, string>) => {
             const next = { ...prev }
@@ -1513,6 +1527,7 @@ export default function AdminPage() {
           setEditInterestRate(drop)
           setEditInterestAmount(drop)
           setEditTermMonths(drop)
+          setEditPaymentsStart(drop)
           setCustomRate(false)
           setCustomTerm(false)
         }
@@ -1658,6 +1673,7 @@ export default function AdminPage() {
               const rateValue = editInterestRate[id] ?? String(t.loans?.interest_rate ?? "")
               const amountValue = editInterestAmount[id] ?? String(t.loans?.interest_amount ?? "")
               const termValue = editTermMonths[id] ?? String(t.loans?.term_months ?? "")
+              const paymentsStartValue = editPaymentsStart[id] ?? (t.loans?.payments_start_date ?? "")
               return (
                 <div className="-mt-2 mb-4">
                   <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Loan terms</p>
@@ -1713,6 +1729,35 @@ export default function AdminPage() {
                         ▾
                       </button>
                     </FieldRow>
+                    {/* Payments can start later than the release -- reminders
+                        and the overdue flag wait for this date. */}
+                    {t.loans?.repayment_frequency === "monthly" && (
+                      <FieldRow icon={<CalendarIcon />}>
+                        <span className="text-sm text-ink-soft shrink-0">First payment</span>
+                        <input
+                          className={`${rowInputClass} text-right`}
+                          type="date"
+                          aria-label="First payment date"
+                          value={paymentsStartValue}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setEditPaymentsStart((prev) => ({ ...prev, [id]: value }))
+                          }}
+                        />
+                        {paymentsStartValue ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditPaymentsStart((prev) => ({ ...prev, [id]: "" }))}
+                            aria-label="Clear first payment date"
+                            className="text-ink-soft text-xs shrink-0 px-1"
+                          >
+                            ✕
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-ink-soft shrink-0">from release</span>
+                        )}
+                      </FieldRow>
+                    )}
                   </div>
                   {termPicker === "rate" && (
                     <InterestRatePickerSheet

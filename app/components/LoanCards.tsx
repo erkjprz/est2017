@@ -7,7 +7,7 @@ import { Sheet } from "@/app/components/Sheet"
 import { ReviewRow } from "@/app/components/TransactionFormUI"
 import { ReceiptThumbs } from "@/app/components/admin/ReceiptThumb"
 import { receiptPaths } from "@/lib/receiptUrl"
-import { formatInterestLabel, lumpSumDueDate, nextDueDate, paymentOverdueLabel } from "@/lib/loanFormat"
+import { firstUnpaidDueDate, formatInterestLabel, lumpSumDueDate, paymentOverdueLabel } from "@/lib/loanFormat"
 import { TRANSACTION_TYPE_LABELS } from "@/lib/transactionLabels"
 import type { Loan, LoanTransaction } from "@/lib/useLoansSummary"
 import { cacheTransactionRow } from "@/lib/transactionRowCache"
@@ -69,7 +69,8 @@ export function nextPayment(loan: Loan): NextPayment | null {
         loan.repayment_frequency,
         loan.start_date,
         loan.lastRepaymentDate ?? null,
-        loan.due_day
+        loan.due_day,
+        loan.payments_start_date
       )
 
   if (HIDE_NEXT_PAYMENT_AMOUNT.has(loan.loan_id)) {
@@ -79,8 +80,10 @@ export function nextPayment(loan: Loan): NextPayment | null {
 
   if (loan.repayment_frequency === "monthly" && loan.term_months) {
     const installment = Math.round((loan.totalRepayable / loan.term_months) * 100) / 100
-    const dueLabel = loan.due_day ? shortDate(nextDueDate(
-          [loan.lastRepaymentDate, loan.lastPendingDate].filter((d): d is string => !!d).sort().pop() ?? loan.start_date,
+    const dueLabel = loan.due_day ? shortDate(firstUnpaidDueDate(
+          [loan.lastRepaymentDate, loan.lastPendingDate].filter((d): d is string => !!d).sort().pop() ?? null,
+          loan.start_date,
+          loan.payments_start_date,
           loan.due_day
         )) : null
     return { kind: "due", amount: Math.min(installment, remaining), dueLabel, overdue }

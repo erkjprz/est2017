@@ -49,6 +49,7 @@ type Loan = {
   last_repayment_date: string | null
   due_day: number | null
   due_date: string | null
+  payments_start_date: string | null
 }
 
 type GainShare = {
@@ -296,6 +297,7 @@ export function LoanDetailPanel({
       repayment_frequency: rawLoan.repayment_frequency ?? "monthly",
       due_day: rawLoan.due_day ?? null,
       due_date: rawLoan.due_date ?? null,
+      payments_start_date: rawLoan.payments_start_date ?? null,
       start_date: rawLoan.start_date,
       notes: rawLoan.notes,
       disbursed,
@@ -412,7 +414,8 @@ export function LoanDetailPanel({
     loan.repayment_frequency,
     loan.start_date,
     loan.last_repayment_date,
-    loan.due_day
+    loan.due_day,
+    loan.payments_start_date
   )
 
   const totalShared = shares.reduce((sum, s) => sum + s.amount, 0)

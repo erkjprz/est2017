@@ -40,6 +40,8 @@ export type Loan = {
   due_day: number | null
   // A lump sum's picked due date; null means end of term.
   due_date: string | null
+  // First monthly payment, when later than the release; null = from release.
+  payments_start_date: string | null
   repaid: number
   // Submitted repayments still waiting on an admin -- not in `repaid` yet.
   pendingRepaid: number
@@ -141,6 +143,7 @@ export async function fetchLoansSummary(memberId: string): Promise<{ loans: Loan
       repayment_frequency: loan.repayment_frequency ?? null,
       due_day: loan.due_day ?? null,
       due_date: loan.due_date ?? null,
+      payments_start_date: loan.payments_start_date ?? null,
       repaid,
       pendingRepaid,
       lastRepaymentDate,
