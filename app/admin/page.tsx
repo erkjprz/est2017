@@ -1749,6 +1749,7 @@ export default function AdminPage() {
                     {t.loans?.repayment_frequency === "monthly" && (
                       <FirstPaymentField
                         value={paymentsStartValue}
+                        dueDay={t.loans?.due_day}
                         onChange={(value) => setEditPaymentsStart((prev) => ({ ...prev, [id]: value }))}
                       />
                     )}

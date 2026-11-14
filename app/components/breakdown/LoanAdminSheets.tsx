@@ -199,6 +199,7 @@ export function EditLoanTermsSheet({
           startDate={adminLoan.start_date}
           paymentsStart={paymentsStart}
           setPaymentsStart={setPaymentsStart}
+          releasedOn={adminLoan.status === "active" ? adminLoan.start_date : undefined}
         />
 
         <div>
