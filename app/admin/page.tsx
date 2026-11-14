@@ -16,6 +16,7 @@ import {
   BankIcon,
   PersonIcon,
   InterestIcon,
+  NoteIcon,
   ClockIcon,
   RepeatIcon,
   FieldError,
@@ -48,6 +49,7 @@ import { FirstPaymentConfirm, needsFirstPaymentConfirm } from "@/app/components/
 import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
+import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -432,10 +434,10 @@ export default function AdminPage() {
     return flags
   }
 
-  // One extra line of context under the card's type line. The lending
-  // line for a Loan Release is long, so it only shows in the review sheet
-  // (inSheet); the card keeps just its warning chips.
-  function contextFor(t: QueueTxn, inSheet = false): string | null {
+  // One extra line of context under the card's type line. A Loan Release's
+  // lending numbers get their own Fund check card in the review sheet
+  // instead (see FundCheckCard); its card keeps just the warning chips.
+  function contextFor(t: QueueTxn): string | null {
     if (t.classification === "Member Withdrawal" && t.member_id && memberWithdrawable[t.member_id]) {
       const w = memberWithdrawable[t.member_id]
       const available = Math.max(0, w.withdrawableNow - (w.pendingOut - Math.abs(Number(t.amount))))
@@ -443,10 +445,6 @@ export default function AdminPage() {
     }
     if (t.classification === "Loan Repayment" && t.loan_id && loanOutstanding[t.loan_id] !== undefined) {
       return `₱${fmt(loanOutstanding[t.loan_id])} left on loan`
-    }
-    const loanCheck = inSheet ? loanCheckFor(t) : null
-    if (loanCheck) {
-      return `₱${fmt(loanCheck.availableBefore)} available to lend · ${loanCheck.borrowerName} ${Math.round(loanCheck.borrowerAfterPct)}% of fund`
     }
     return null
   }
@@ -1660,7 +1658,7 @@ export default function AdminPage() {
             <p className="px-1 pt-2 text-xs text-ink-soft">{subtitle}</p>
             {(() => {
               const flags = flagsFor(t)
-              const context = contextFor(t, true)
+              const context = contextFor(t)
               if (!flags.length && !context) return null
               return (
                 <div className="px-1 pt-2 space-y-1.5">
@@ -1768,6 +1766,10 @@ export default function AdminPage() {
                       )
                     })()}
                   </div>
+                  {(() => {
+                    const check = loanCheckFor(t)
+                    return check && lendingPosition ? <FundCheckCard check={check} limits={lendingPosition.limits} /> : null
+                  })()}
                   {termPicker === "rate" && (
                     <InterestRatePickerSheet
                       value={rateValue}
@@ -1941,9 +1943,19 @@ export default function AdminPage() {
             </div>
             )}
 
-            {(t.description || (!needsLoanBank && !needsWithdrawalBank) || receiptPaths(t).length > 0) && (
+            {t.description?.trim() && (
+              <div className="mt-4">
+                <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Note</p>
+                <div className="card overflow-hidden">
+                  <FieldRow icon={<NoteIcon />}>
+                    <span className="flex-1 min-w-0 text-sm text-ink whitespace-pre-wrap break-words">{t.description.trim()}</span>
+                  </FieldRow>
+                </div>
+              </div>
+            )}
+
+            {((!needsLoanBank && !needsWithdrawalBank) || receiptPaths(t).length > 0) && (
               <div className="mt-4 pt-4 border-t border-hairline space-y-2">
-                {t.description && <p className="text-sm text-ink-soft">{t.description}</p>}
                 {/* Withdrawal/Loan Release never have a bank on record yet at
                     this point -- that's exactly what the picker above is
                     for -- so this line would always read "Bank: None" right
