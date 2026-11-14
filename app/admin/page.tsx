@@ -432,8 +432,10 @@ export default function AdminPage() {
     return flags
   }
 
-  // One extra line of context under the card's type line.
-  function contextFor(t: QueueTxn): string | null {
+  // One extra line of context under the card's type line. The lending
+  // line for a Loan Release is long, so it only shows in the review sheet
+  // (inSheet); the card keeps just its warning chips.
+  function contextFor(t: QueueTxn, inSheet = false): string | null {
     if (t.classification === "Member Withdrawal" && t.member_id && memberWithdrawable[t.member_id]) {
       const w = memberWithdrawable[t.member_id]
       const available = Math.max(0, w.withdrawableNow - (w.pendingOut - Math.abs(Number(t.amount))))
@@ -442,7 +444,7 @@ export default function AdminPage() {
     if (t.classification === "Loan Repayment" && t.loan_id && loanOutstanding[t.loan_id] !== undefined) {
       return `₱${fmt(loanOutstanding[t.loan_id])} left on loan`
     }
-    const loanCheck = loanCheckFor(t)
+    const loanCheck = inSheet ? loanCheckFor(t) : null
     if (loanCheck) {
       return `₱${fmt(loanCheck.availableBefore)} available to lend · ${loanCheck.borrowerName} ${Math.round(loanCheck.borrowerAfterPct)}% of fund`
     }
@@ -1631,11 +1633,6 @@ export default function AdminPage() {
                     : "Approve"}
                 </button>
               </div>
-              {needsLoanBank && (
-                <p className="text-[11px] text-ink-soft text-center mt-2">
-                  The loan starts today — approve once the last transfer has gone out.
-                </p>
-              )}
             </>
           )
 
@@ -1663,7 +1660,7 @@ export default function AdminPage() {
             <p className="px-1 pt-2 text-xs text-ink-soft">{subtitle}</p>
             {(() => {
               const flags = flagsFor(t)
-              const context = contextFor(t)
+              const context = contextFor(t, true)
               if (!flags.length && !context) return null
               return (
                 <div className="px-1 pt-2 space-y-1.5">
