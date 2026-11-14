@@ -51,6 +51,7 @@ export function LoanTermsCard({
   startDate,
   paymentsStart,
   setPaymentsStart,
+  releasedOn,
   showErrors = false
 }: {
   amount: string
@@ -79,6 +80,9 @@ export function LoanTermsCard({
   // never offer it. Picking a date also sets the due day to match.
   paymentsStart?: string
   setPaymentsStart?: (v: string) => void
+  // An active loan's release date, so "from release" shows its real first
+  // due date; unset for a request, which assumes release today.
+  releasedOn?: string
   // Set once Submit/Continue was tapped with something missing -- each
   // empty term then shows what it needs (see FieldError).
   showErrors?: boolean
@@ -298,6 +302,8 @@ export function LoanTermsCard({
         {repaymentFrequency === "monthly" && setPaymentsStart && (
           <FirstPaymentField
             value={paymentsStart ?? ""}
+            dueDay={dueDay ? Number(dueDay) : null}
+            releasedOn={releasedOn}
             onChange={(date) => {
               setPaymentsStart(date)
               if (date) setDueDay(String(dayOfMonth(date)))
