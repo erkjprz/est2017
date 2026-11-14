@@ -18,6 +18,7 @@ import {
   InterestIcon,
   ClockIcon,
   CalendarIcon,
+  RepeatIcon,
   FieldError,
   invalidRowClass,
   rowSelectClass,
@@ -30,7 +31,7 @@ import { receiptPaths, removeReceipts, uploadReceipts } from "@/lib/receiptUrl"
 import { approveLoanRelease } from "@/lib/approveLoan"
 import { approveBorrowerMember } from "@/lib/approveBorrower"
 import { dateOnly } from "@/lib/currentValue"
-import { dayOfMonth } from "@/lib/loanFormat"
+import { dayOfMonth, ordinalDay } from "@/lib/loanFormat"
 import { TRANSACTION_TYPE_LABELS as typeLabels } from "@/lib/transactionLabels"
 import { readCache, writeCache } from "@/lib/cache"
 import {
@@ -1758,6 +1759,19 @@ export default function AdminPage() {
                         )}
                       </FieldRow>
                     )}
+                    {/* The monthly due day the borrower asked for -- or, once a
+                        first payment date is picked, that date's day, which
+                        is what Save will store. */}
+                    {t.loans?.repayment_frequency === "monthly" && (() => {
+                      const dueDayShown = paymentsStartValue ? dayOfMonth(paymentsStartValue) : t.loans?.due_day
+                      return (
+                        <FieldRow icon={<RepeatIcon />}>
+                          <span className={`flex-1 min-w-0 text-sm ${dueDayShown ? "text-ink" : "text-ink-soft"}`}>
+                            {dueDayShown ? `Due on the ${ordinalDay(dueDayShown)} of each month` : "No monthly due day"}
+                          </span>
+                        </FieldRow>
+                      )
+                    })()}
                   </div>
                   {termPicker === "rate" && (
                     <InterestRatePickerSheet
