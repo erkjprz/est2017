@@ -43,6 +43,7 @@ import { BankImpactPreview } from "@/app/components/BankImpact"
 import { Toast } from "@/app/components/Toast"
 import { MessagesButton } from "@/app/components/admin/MessagesButton"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
+import { checkLoanRequest, fetchLendingPosition, type LendingPosition } from "@/lib/lendingLimits"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -229,6 +230,8 @@ export default function AdminPage() {
   const [loanOutstanding, setLoanOutstanding] = useState<Record<string, number>>({})
   const [recentSimilar, setRecentSimilar] = useState<RecentEntry[]>([])
   const [loansToClose, setLoansToClose] = useState<LoanToClose[]>([])
+  // Only fetched while a Loan Release is waiting -- see loadQueueContext.
+  const [lendingPosition, setLendingPosition] = useState<LendingPosition | null>(null)
 
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
@@ -337,6 +340,23 @@ export default function AdminPage() {
     setLoanOutstanding(outstanding)
     setRecentSimilar(similarRes.data ?? [])
     setLoansToClose(toCloseRes.data ?? [])
+
+    // Lending limits only matter for a loan waiting to go out, and the
+    // position needs every member's current value -- skip it otherwise.
+    if (pending.some((t) => t.classification === "Loan Release" && t.loan_id)) {
+      fetchLendingPosition()
+        .then(setLendingPosition)
+        .catch(() => setLendingPosition(null))
+    } else {
+      setLendingPosition(null)
+    }
+  }
+
+  // Lending limits for a pending Loan Release, from its current amount --
+  // so an admin's edit to the amount is checked before they approve it.
+  function loanCheckFor(t: QueueTxn) {
+    if (t.classification !== "Loan Release" || !t.loan_id || !lendingPosition) return null
+    return checkLoanRequest(lendingPosition, t.loan_id, Math.abs(Number(t.amount)))
   }
 
   // What the admin should notice before approving -- each one a short chip
@@ -359,6 +379,20 @@ export default function AdminPage() {
 
     if (t.classification === "Loan Repayment" && t.loan_id && loanOutstanding[t.loan_id] !== undefined) {
       if (amount > loanOutstanding[t.loan_id] + 0.004) flags.push({ label: "More than owed", tone: "warn" })
+    }
+
+    const loanCheck = loanCheckFor(t)
+    if (loanCheck) {
+      if (loanCheck.overTotalBy > 0) flags.push({ label: `Over fund limit by ₱${fmt(loanCheck.overTotalBy)}`, tone: "warn" })
+      if (loanCheck.overBorrowerBy > 0) flags.push({ label: `Over borrower limit by ₱${fmt(loanCheck.overBorrowerBy)}`, tone: "warn" })
+      const top = loanCheck.overHold[0]
+      if (top) {
+        const others = loanCheck.overHold.length - 1
+        flags.push({
+          label: `${top.name} ${Math.round(top.pct)}% on hold${others > 0 ? ` +${others} more` : ""}`,
+          tone: "warn"
+        })
+      }
     }
 
     const created = new Date(t.created_at).getTime()
@@ -390,6 +424,10 @@ export default function AdminPage() {
     }
     if (t.classification === "Loan Repayment" && t.loan_id && loanOutstanding[t.loan_id] !== undefined) {
       return `₱${fmt(loanOutstanding[t.loan_id])} left on loan`
+    }
+    const loanCheck = loanCheckFor(t)
+    if (loanCheck) {
+      return `₱${fmt(loanCheck.availableBefore)} available to lend · ${loanCheck.borrowerName} ${Math.round(loanCheck.borrowerAfterPct)}% of fund`
     }
     return null
   }
@@ -962,6 +1000,20 @@ export default function AdminPage() {
                 <circle cx="9" cy="8" r="3.2" />
                 <path d="M3.5 19c.6-3.1 2.8-5 5.5-5s4.9 1.9 5.5 5" />
                 <path d="M15.5 5.2a3 3 0 0 1 0 5.6M17.5 14.3c1.7.6 2.8 2.2 3 4.7" />
+              </svg>
+            </button>
+
+            {/* Lending limits -- the caps the Loan Release warnings below
+                are checked against. */}
+            <button
+              onClick={() => router.push("/admin/lending")}
+              className="shrink-0 inline-flex items-center justify-center w-9 h-9 text-ink-soft border border-hairline rounded-full hover:bg-paper-2 hover:text-ink transition-colors"
+              title="Lending limits"
+              aria-label="Lending limits"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                <path d="M4 20h16" />
+                <path d="M6 16V11M10 16V7M14 16v-5M18 16V4" />
               </svg>
             </button>
 
