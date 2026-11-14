@@ -11,7 +11,6 @@ import {
   fetchLendingPosition,
   holdPct,
   markLendingLimitsSeen,
-  maxPerBorrower,
   saveLendingLimits,
   type LendingPosition
 } from "@/lib/lendingLimits"
@@ -117,7 +116,6 @@ export default function LendingLimitsPage() {
 
   const limits = position?.limits
   const available = position ? availableToLend(position) : 0
-  const perBorrowerMax = position ? maxPerBorrower(position) : 0
   const loanedPct = position && position.fundTotal > 0 ? (position.loanedOut / position.fundTotal) * 100 : 0
 
   return (
@@ -162,7 +160,6 @@ export default function LendingLimitsPage() {
                     <Row label="Fund total" value={`₱${fmt(position.fundTotal)}`} />
                     <Row label="Cash in banks" value={`₱${fmt(position.cash)}`} />
                     <Row label="Out on loan" value={`₱${fmt(position.loanedOut)} · ${pct(loanedPct)}`} />
-                    <Row label="Most one borrower can have" value={`₱${fmt(perBorrowerMax)}`} />
                   </dl>
                 </div>
               </section>
