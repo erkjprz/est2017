@@ -45,6 +45,7 @@ import {
 import { BankImpactPreview } from "@/app/components/BankImpact"
 import { Toast } from "@/app/components/Toast"
 import { MessagesButton } from "@/app/components/admin/MessagesButton"
+import { FirstPaymentConfirm, needsFirstPaymentConfirm } from "@/app/components/admin/FirstPaymentConfirm"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
 
@@ -179,6 +180,9 @@ export default function AdminPage() {
   // Approve stays tappable in the review sheet; tapping it with the bank or
   // proof still missing highlights what's needed (this holds which item).
   const [approveTriedId, setApproveTriedId] = useState<string | null>(null)
+  // A monthly Loan Release whose First payment is still "from release" asks
+  // once before approving -- see FirstPaymentConfirm.
+  const [confirmFirstPaymentId, setConfirmFirstPaymentId] = useState<string | null>(null)
   // Loan Release terms in the review sheet use the same pickers as a loan
   // request; "custom" swaps a row to a typed input, same as LoanTermsCard.
   const [termPicker, setTermPicker] = useState<"rate" | "term" | null>(null)
@@ -1560,6 +1564,19 @@ export default function AdminPage() {
               }}
               onConfirm={() => rejectTransaction(t.transaction_id, rejectReason)}
             />
+          ) : confirmFirstPaymentId === t.transaction_id ? (
+            <>
+              {actionError && <p className="text-sm text-rust mb-3">{actionError}</p>}
+              <FirstPaymentConfirm
+                dueDay={t.loans?.due_day}
+                busy={uploadingReceiptId === t.transaction_id}
+                onBack={() => setConfirmFirstPaymentId(null)}
+                onApprove={() => {
+                  setConfirmFirstPaymentId(null)
+                  approveTransaction(id)
+                }}
+              />
+            </>
           ) : (
             <>
               {actionError && <p className="text-sm text-rust mb-3">{actionError}</p>}
@@ -1600,6 +1617,7 @@ export default function AdminPage() {
                       return
                     }
                     if (isConfirmedMoney) approveBulkIds([id])
+                    else if (needsLoanBank && needsFirstPaymentConfirm(t.loans)) setConfirmFirstPaymentId(id)
                     else approveTransaction(id)
                   }}
                   disabled={!canApprove}
@@ -1627,6 +1645,7 @@ export default function AdminPage() {
             onClose={() => {
               setReviewingTxnId(null)
               setApproveTriedId(null)
+              setConfirmFirstPaymentId(null)
               setTermPicker(null)
               setCustomRate(false)
               setCustomTerm(false)
