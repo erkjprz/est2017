@@ -18,6 +18,7 @@ import { dateOnly } from "@/lib/currentValue"
 import type { InterestType } from "@/lib/loanMath"
 import { fetchBankBalances, groupImpacts, txnImpact } from "@/lib/bankImpact"
 import { BankImpactPreview } from "@/app/components/BankImpact"
+import { FirstPaymentConfirm, needsFirstPaymentConfirm } from "@/app/components/admin/FirstPaymentConfirm"
 
 export type AdminLoan = {
   loan_id: string
@@ -239,6 +240,7 @@ export function ReleaseLoanSheet({
   // highlights what's still needed instead.
   const [showErrors, setShowErrors] = useState(false)
   const [balances, setBalances] = useState<Record<string, number> | null>(null)
+  const [confirmingFirstPayment, setConfirmingFirstPayment] = useState(false)
 
   useEffect(() => {
     fetchBankBalances()
@@ -248,11 +250,16 @@ export function ReleaseLoanSheet({
 
   const chosenBank = banks.find((b) => b.id === bankChoice)
 
-  async function approve() {
+  async function approve(firstPaymentConfirmed = false) {
     if (!bankChoice || receipts.length === 0) {
       setShowErrors(true)
       return
     }
+    if (!firstPaymentConfirmed && needsFirstPaymentConfirm(adminLoan)) {
+      setConfirmingFirstPayment(true)
+      return
+    }
+    setConfirmingFirstPayment(false)
     setApproving(true)
     setError("")
 
@@ -306,9 +313,18 @@ export function ReleaseLoanSheet({
               className="mb-3"
             />
           )}
-          <button className={primaryButtonClass} onClick={approve} disabled={approving}>
-            {approving ? "Releasing..." : `Approve & Release ₱${fmt(adminLoan.principal)}`}
-          </button>
+          {confirmingFirstPayment ? (
+            <FirstPaymentConfirm
+              dueDay={adminLoan.due_day}
+              busy={approving}
+              onBack={() => setConfirmingFirstPayment(false)}
+              onApprove={() => approve(true)}
+            />
+          ) : (
+            <button className={primaryButtonClass} onClick={() => approve()} disabled={approving}>
+              {approving ? "Releasing..." : `Approve & Release ₱${fmt(adminLoan.principal)}`}
+            </button>
+          )}
           <p className="text-[11px] text-ink-soft text-center mt-2">
             The loan starts today — approve once the last transfer has gone out. Activates the loan and
             sets aside each member&apos;s share of it.
