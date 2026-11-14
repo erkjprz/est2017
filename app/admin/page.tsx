@@ -17,7 +17,6 @@ import {
   PersonIcon,
   InterestIcon,
   ClockIcon,
-  CalendarIcon,
   RepeatIcon,
   FieldError,
   invalidRowClass,
@@ -46,6 +45,7 @@ import { BankImpactPreview } from "@/app/components/BankImpact"
 import { Toast } from "@/app/components/Toast"
 import { MessagesButton } from "@/app/components/admin/MessagesButton"
 import { FirstPaymentConfirm, needsFirstPaymentConfirm } from "@/app/components/admin/FirstPaymentConfirm"
+import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
 
@@ -1749,31 +1749,10 @@ export default function AdminPage() {
                     {/* Payments can start later than the release -- reminders
                         and the overdue flag wait for this date. */}
                     {t.loans?.repayment_frequency === "monthly" && (
-                      <FieldRow icon={<CalendarIcon />}>
-                        <span className="text-sm text-ink-soft shrink-0">First payment</span>
-                        <input
-                          className={`${rowInputClass} text-right`}
-                          type="date"
-                          aria-label="First payment date"
-                          value={paymentsStartValue}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setEditPaymentsStart((prev) => ({ ...prev, [id]: value }))
-                          }}
-                        />
-                        {paymentsStartValue ? (
-                          <button
-                            type="button"
-                            onClick={() => setEditPaymentsStart((prev) => ({ ...prev, [id]: "" }))}
-                            aria-label="Clear first payment date"
-                            className="text-ink-soft text-xs shrink-0 px-1"
-                          >
-                            ✕
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-ink-soft shrink-0">from release</span>
-                        )}
-                      </FieldRow>
+                      <FirstPaymentField
+                        value={paymentsStartValue}
+                        onChange={(value) => setEditPaymentsStart((prev) => ({ ...prev, [id]: value }))}
+                      />
                     )}
                     {/* The monthly due day the borrower asked for -- or, once a
                         first payment date is picked, that date's day, which
