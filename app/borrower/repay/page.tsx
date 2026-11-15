@@ -105,7 +105,7 @@ export default function BorrowerRepayPage() {
 
       const { data: loans, error: loansError } = await supabase
         .from("loans")
-        .select("loan_id, name, principal, interest_type, interest_rate, interest_amount, status, start_date, term_months, repayment_frequency")
+        .select("loan_id, name, principal, interest_type, interest_rate, interest_amount, status, start_date, term_months, repayment_frequency, payments_start_date")
         .or(filter)
         .eq("status", "active")
         .order("start_date", { ascending: false })
@@ -116,7 +116,13 @@ export default function BorrowerRepayPage() {
         return
       }
 
-      setMyLoans(loans ?? [])
+      // A loan whose payments haven't started yet (First payment still in
+      // the future) goes to the end of the list, so the loan actually
+      // being paid comes first -- and is picked for them below.
+      const today = new Date().toISOString().slice(0, 10)
+      const notStarted = (l: { payments_start_date?: string | null }) => !!l.payments_start_date && l.payments_start_date > today
+      const ordered = [...(loans ?? [])].sort((a, b) => Number(notStarted(a)) - Number(notStarted(b)))
+      setMyLoans(ordered)
 
       const loanIds = (loans ?? []).map((l) => l.loan_id)
       if (loanIds.length > 0) {
@@ -139,11 +145,14 @@ export default function BorrowerRepayPage() {
         })
         setLoanRepaidTotals(totals)
 
-        // Only one loan to pay (the usual case): pick it and start from its
-        // saved or usual payment, capped at what's left.
-        if (loans!.length === 1) {
-          setSelectedLoanId(loans![0].loan_id)
-          const start = startingAmount(loans![0], totals[loans![0].loan_id] || 0, saved)
+        // Only one loan being paid right now (the usual case -- or one
+        // plus another whose payments start later): pick it and start from
+        // its saved or usual payment, capped at what's left.
+        const payingNow = ordered.filter((l) => !notStarted(l))
+        const pick = payingNow.length === 1 ? payingNow[0] : ordered.length === 1 ? ordered[0] : null
+        if (pick) {
+          setSelectedLoanId(pick.loan_id)
+          const start = startingAmount(pick, totals[pick.loan_id] || 0, saved)
           if (start > 0) setAmount(String(start))
         }
       }
