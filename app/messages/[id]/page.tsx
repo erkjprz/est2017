@@ -374,7 +374,11 @@ export default function ConversationPage() {
       )}
 
       {conversation && !loadError && (
-        <div className="fixed inset-x-0 z-30 bg-paper border-t border-hairline" style={{ bottom: composerBottom }}>
+        // Pinned to the very bottom, with the dock's height as padding, so
+        // its background also fills the strip behind the floating dock --
+        // sitting at bottom: var(--dock-h) left that strip open, and
+        // messages scrolled through the gaps around the pill.
+        <div className="fixed inset-x-0 bottom-0 z-30 bg-paper border-t border-hairline" style={{ paddingBottom: composerBottom }}>
           <div className="max-w-3xl mx-auto px-4 sm:px-5 py-3">
             {sendError && <p className="text-xs text-rust mb-2">{sendError}</p>}
             {/* One bar, chat-app style: attach, a text box that grows with
