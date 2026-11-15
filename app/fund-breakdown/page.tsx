@@ -9,7 +9,8 @@ import { useAuth } from "@/app/auth-context"
 import type { InterestType } from "@/lib/loanMath"
 import { formatInterestLabel, daysTermLabel, durationLabel, paymentOverdueLabel } from "@/lib/loanFormat"
 import { useAdminTourActive } from "@/lib/adminTour"
-import { ExampleInterestDueCard, ExampleLoansNeedsActionCard } from "@/app/components/admin/TourExamples"
+import { useAdminTourStepId } from "@/app/components/admin/AdminTour"
+import { ExampleGainSplit, ExampleInterestDueCard, ExampleLoansNeedsActionCard } from "@/app/components/admin/TourExamples"
 import { getPendingBankInterestGroups, isBankInterestDistributionDue } from "@/lib/bankInterest"
 import { LoanDetailPanel } from "@/app/components/breakdown/LoanDetailPanel"
 import { BankDetailPanel } from "@/app/components/breakdown/BankDetailPanel"
@@ -1512,8 +1513,10 @@ function LoansPanel({
   onLoanClosed?: () => void
 }) {
   const cachedLoans = readCache<Loan[]>(LOANS_CACHE_KEY)
-  // Same for "Needs action" -- an example card while the admin tour runs.
+  // Same for "Needs action" -- an example card while the admin tour runs --
+  // and an example split on the step explaining how a loan's gain is shared.
   const tourActive = useAdminTourActive()
+  const tourShowsSplit = useAdminTourStepId() === "loans-share"
   const [loading, setLoading] = useState(!cachedLoans)
   const [loans, setLoans] = useState<Loan[]>(cachedLoans ?? [])
   const [loadError, setLoadError] = useState("")
@@ -1677,6 +1680,7 @@ function LoansPanel({
       )}
 
       {isAdmin && tourActive && needsAction.length === 0 && <ExampleLoansNeedsActionCard />}
+      {isAdmin && tourShowsSplit && <ExampleGainSplit total={600} asOf="on the day the loan closes" />}
 
       {needsAction.length > 0 && (
         <div data-tour="loans-attention" className="card mb-6">
@@ -1960,8 +1964,10 @@ function BanksPanel({
 }) {
   const cachedBanks = readCache<BanksSnapshot>(BANKS_CACHE_KEY)
   // The admin tour shows an example "Needs distribution" card when there's
-  // nothing to distribute, so its spotlight has something to land on.
+  // nothing to distribute, so its spotlight has something to land on, and
+  // an example split on the step explaining how interest is shared.
   const tourActive = useAdminTourActive()
+  const tourShowsSplit = useAdminTourStepId() === "interest-share"
   const [loading, setLoading] = useState(!cachedBanks)
   const [banks, setBanks] = useState<Bank[]>(cachedBanks?.banks ?? [])
   const [loadError, setLoadError] = useState("")
@@ -2141,6 +2147,7 @@ function BanksPanel({
       )}
 
       {isAdmin && tourActive && dueBanks.length === 0 && <ExampleInterestDueCard />}
+      {isAdmin && tourShowsSplit && <ExampleGainSplit total={2450.18} asOf="on Dec 31" />}
 
       {isAdmin && !loadError && dueBanks.length > 0 && (
         <div data-tour="bank-interest-due" className="card mb-4">

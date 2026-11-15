@@ -179,12 +179,26 @@ const STEPS: Step[] = [
     text: "All bank interest is distributed at year end. Once December's interest is in, the year's total shows up here. Open each bank and tap Review & distribute."
   },
   {
+    id: "interest-share",
+    path: "/fund-breakdown?tab=banks",
+    targets: ["example-split"],
+    title: "How bank interest is shared",
+    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with Shares in gains turned off get none."
+  },
+  {
     id: "loans",
     path: "/fund-breakdown?tab=loans",
     targets: ["loans-attention", "loans-total"],
     via: [{ path: "/fund-breakdown", target: "tab-loans", title: "Tap the Loans tab", hint: "Every loan the fund has released." }],
     title: "When a loan is overdue or paid off",
     text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared."
+  },
+  {
+    id: "loans-share",
+    path: "/fund-breakdown?tab=loans",
+    targets: ["example-split"],
+    title: "How a loan's gain is shared",
+    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund."
   },
   {
     id: "done",

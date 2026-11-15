@@ -340,3 +340,55 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
       return null
   }
 }
+
+// How a gain is split across members -- shown by the admin tour on
+// Breakdown → Banks (a year's interest) and → Loans (a closed loan's gain).
+// Nothing to do here; it explains the split the distribute and close
+// screens work out: each sharing member's portion of the fund's value on
+// the day it's split.
+const SPLIT_MEMBERS = [
+  { name: "Maria Santos", value: 120000 },
+  { name: "Jose Reyes", value: 90000 },
+  { name: "Ana Cruz", value: 60000 }
+]
+
+export function ExampleGainSplit({ total, asOf }: { total: number; asOf: string }) {
+  const fundValue = SPLIT_MEMBERS.reduce((sum, m) => sum + m.value, 0)
+  const peso = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return (
+    <div aria-hidden="true" data-tour="example-split" className="card mb-6">
+      <div className="px-5 pt-4 pb-3">
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono">How it&apos;s shared</p>
+          <ExampleBadge />
+        </div>
+        <p className="text-sm text-ink">
+          <span className="font-mono [font-variant-numeric:tabular-nums] font-semibold">{peso(total)}</span>
+          {" split by each member's value in the fund "}
+          {asOf}.
+        </p>
+        <div className="mt-2">
+          {SPLIT_MEMBERS.map((m) => {
+            const pct = (m.value / fundValue) * 100
+            return (
+              <div
+                key={m.name}
+                className="py-2 flex items-center justify-between gap-3 border-t border-dashed border-hairline text-sm"
+              >
+                <span className="min-w-0">
+                  <span className="block font-medium text-ink truncate">{m.name}</span>
+                  <span className="block text-[11px] font-mono text-ink-soft">
+                    {peso(m.value)} in the fund · {pct.toFixed(0)}%
+                  </span>
+                </span>
+                <span className="font-mono [font-variant-numeric:tabular-nums] font-semibold text-sage shrink-0">
+                  +{peso((total * m.value) / fundValue)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
