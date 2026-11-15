@@ -244,8 +244,8 @@ export default function LendingLimitsPage() {
                 )}
               </section>
 
-              {/* ---- Member holds ---- */}
-              <section>
+              {/* ---- Member holds ---- (data-tour: the admin tour's step on holds) */}
+              <section data-tour="lending-holds">
                 <p className={sectionLabelClass}>Member holds</p>
                 <p className={sectionNoteClass}>
                   Money on hold for loans and investments, as a share of each member&apos;s own value. Limit{" "}

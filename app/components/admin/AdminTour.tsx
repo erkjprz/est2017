@@ -165,8 +165,15 @@ const STEPS: Step[] = [
     targets: ["lending-limits"],
     via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "The bar-chart icon, next to Members." }],
     title: "When a loan is requested",
-    text: "Each request is checked against these limits. Going over shows a warning on it but doesn't block it. Member holds shows how much of each member's money is tied up in loans and investments. Change the limits only when everyone agrees.",
+    text: "Each request is checked against these limits. Going over shows a warning on the request but doesn't block it. Change the limits only when everyone agrees.",
     topic: "Lending limits"
+  },
+  {
+    id: "lending-holds",
+    path: "/admin/lending",
+    targets: ["lending-holds"],
+    title: "Member holds",
+    text: "When a loan goes out, each member's share of it is on hold until it's repaid. The same goes for money in investments. This shows how much of each member's value is on hold; they can't withdraw that part. The Member hold limit warns when a loan would tie up too much of anyone's money."
   },
   {
     id: "messages",
