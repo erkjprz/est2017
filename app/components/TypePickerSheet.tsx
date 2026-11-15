@@ -43,6 +43,7 @@ export function TypePickerSheet({
         {items.map((o) => (
           <button
             key={o.key}
+            data-tour={`type-${o.key}`}
             onClick={() => onSelect(o.key)}
             className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${
               o.key === value ? "bg-(--selected-bg)" : ""

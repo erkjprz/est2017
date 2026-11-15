@@ -12,6 +12,8 @@ import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachmen
 import { TransactionPickerSheet } from "@/app/components/TransactionPickerSheet"
 import { TransactionRow, cardDate, describeTransaction, type Txn } from "@/app/components/transactions/TransactionParts"
 import { readCache, writeCache } from "@/lib/cache"
+import { useAdminTourStepId } from "@/app/components/admin/AdminTour"
+import { ExampleConversation } from "@/app/components/admin/TourExamples"
 import {
   ATTACHMENTS_MAX,
   BODY_MAX,
@@ -51,6 +53,8 @@ function MessagesInbox() {
   const searchParams = useSearchParams()
   const { loading: authLoading, member } = useAuth()
   const isAdmin = member?.role === "admin"
+  // The admin tour shows an example thread here when there are none yet.
+  const tourOnMessages = useAdminTourStepId() === "messages"
   const cacheKey = member ? `conversations:${member.member_id}` : null
   const cached = cacheKey ? readCache<ConversationSummary[]>(cacheKey) : undefined
 
@@ -199,7 +203,9 @@ function MessagesInbox() {
 
           {loadError && <p className="text-sm text-rust mb-4">Couldn&apos;t load messages: {loadError}</p>}
 
-          {!loadError && visible.length === 0 && (
+          {tourOnMessages && visible.length === 0 && <ExampleConversation />}
+
+          {!loadError && visible.length === 0 && !tourOnMessages && (
             <p className="text-sm text-ink-soft text-center py-12 card">
               {isAdmin && filter === "closed"
                 ? "No closed conversations."

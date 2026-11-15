@@ -124,6 +124,7 @@ function FundBreakdownHub() {
             {TABS.map((t) => (
               <button
                 key={t.id}
+                data-tour={`tab-${t.id}`}
                 onClick={() => selectTab(t.id)}
                 className={`flex-1 text-[14px] font-semibold pt-1 pb-2.5 border-b-2 -mb-px transition-colors ${
                   activeTab === t.id ? "text-ink border-gold" : "text-ink-soft border-transparent"

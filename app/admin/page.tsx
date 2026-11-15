@@ -266,7 +266,7 @@ export default function AdminPage() {
   // queue gets example items so the spotlight has something to land on
   // (see TourExamples).
   const tourStepId = useAdminTourStepId()
-  const tourExamples = tourStepId === "review" || tourStepId === "signup" || tourStepId === "fix" || tourStepId === "export"
+  const tourExamples = ["review-in", "review-out", "signup", "fix", "export"].includes(tourStepId ?? "")
   useEffect(() => {
     if (tourDecided.current || checkingAccess || member?.role !== "admin") return
     tourDecided.current = true
@@ -1170,7 +1170,7 @@ export default function AdminPage() {
 
             {/* ---- Confirmed money (bulk) ---- */}
             {showTxns && bulkTransactions.length > 0 && (
-              <section>
+              <section data-tour="queue-confirmed">
                 <div className="flex items-center justify-between gap-3">
                   <label
                     className={`flex items-center gap-2.5 text-sm font-semibold ${
@@ -1345,7 +1345,7 @@ export default function AdminPage() {
 
             {/* ---- Needs a decision ---- */}
             {showTxns && reviewTransactions.length > 0 && (
-              <section>
+              <section data-tour="queue-decision">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold">Needs a decision</span>
                   <span className="shrink-0 text-[11px] font-mono uppercase tracking-wide text-gold border border-gold rounded-full px-2.5 py-1">

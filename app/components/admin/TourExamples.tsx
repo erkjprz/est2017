@@ -31,40 +31,86 @@ export function ExampleQueueHeading() {
   return (
     <span className="inline-flex items-center gap-3">
       <span>
-        <span className="text-gold">2</span> waiting on you
+        <span className="text-gold">6</span> waiting on you
       </span>
       <ExampleBadge />
     </span>
   )
 }
 
+type ExampleTxn = {
+  name: string
+  arrow: string
+  tone: "in" | "out"
+  line: string
+  amount: string
+  flags?: string[]
+}
+
+// One of every kind of entry that reaches the queue, split the same way
+// the real one is: money already in the bank (approve in a batch) vs money
+// going out or anything that needs checking one at a time.
+const CONFIRMED: ExampleTxn[] = [
+  { name: "Maria Santos", arrow: "↑", tone: "in", line: "Contribution · BDO", amount: "₱1,000.00", flags: ["No receipt", "Possible duplicate"] },
+  { name: "Ana Cruz", arrow: "↑", tone: "in", line: "Loan Payment · Maya", amount: "₱2,150.00" }
+]
+const NEEDS_DECISION: ExampleTxn[] = [
+  { name: "Jose Reyes", arrow: "↓", tone: "out", line: "Withdrawal · pick the disbursing bank", amount: "₱5,000.00", flags: ["Over balance"] },
+  { name: "Ben Garcia", arrow: "↓", tone: "out", line: "Loan Release · requested", amount: "₱20,000.00", flags: ["Over borrower limit by ₱2,000.00"] },
+  { name: "Fund", arrow: "↑", tone: "in", line: "Investment Return · Rice trading", amount: "₱3,600.00" }
+]
+
+function ExampleTxnCard({ t, action }: { t: ExampleTxn; action: string }) {
+  return (
+    <div className="card overflow-hidden flex items-center gap-3 px-4 py-3">
+      <FlowBadge arrow={t.arrow} tone={t.tone} small />
+      <span className="min-w-0 flex-1">
+        <span className="block font-display font-medium truncate text-sm">{t.name}</span>
+        <span className="block text-xs text-ink-soft truncate">{t.line}</span>
+        {t.flags && (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {t.flags.map((f) => (
+              <Chip key={f}>{f}</Chip>
+            ))}
+          </span>
+        )}
+      </span>
+      <span className="shrink-0 text-right">
+        <span className="block text-sm font-mono">{t.amount}</span>
+        <span className={`block text-[11px] font-mono mt-0.5 ${action === "Review →" ? "text-gold" : "text-ink-soft"}`}>{action}</span>
+      </span>
+    </div>
+  )
+}
+
 export function ExampleQueueSection() {
   return (
-    <section aria-hidden="true">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold">Confirmed money</span>
-        <ExampleBadge />
-      </div>
-      <p className="mt-1.5 text-xs text-ink-soft">Already in the bank — nothing left to decide, just to confirm.</p>
-      <div className="mt-3 space-y-2">
-        <div data-tour="queue-item" className="card overflow-hidden flex items-center gap-3 px-4 py-3">
-          <FlowBadge arrow="↑" tone="in" small />
-          <span className="min-w-0 flex-1">
-            <span className="block font-display font-medium truncate text-sm">Maria Santos</span>
-            <span className="block text-xs text-ink-soft truncate">Contribution · BDO</span>
-            <span className="block text-[11px] text-ink-soft font-mono truncate">Nov 14 · 2h ago</span>
-            <span className="mt-1 flex flex-wrap gap-1">
-              <Chip>No receipt</Chip>
-              <Chip>Possible duplicate</Chip>
-            </span>
-          </span>
-          <span className="shrink-0 text-right">
-            <span className="block text-sm font-mono">₱1,000.00</span>
-            <span className="block text-[11px] text-ink-soft mt-0.5">Reject</span>
-          </span>
+    <div aria-hidden="true" className="space-y-8">
+      <section data-tour="queue-confirmed">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold">Confirmed money</span>
+          <ExampleBadge />
         </div>
-      </div>
-    </section>
+        <p className="mt-1 text-xs text-ink-soft">Already in the bank — just confirm.</p>
+        <div className="mt-2 space-y-2">
+          {CONFIRMED.map((t) => (
+            <ExampleTxnCard key={t.name} t={t} action="Reject" />
+          ))}
+        </div>
+      </section>
+      <section data-tour="queue-decision">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold">Needs a decision</span>
+          <ExampleBadge />
+        </div>
+        <p className="mt-1 text-xs text-ink-soft">Money going out needs a bank and proof of transfer.</p>
+        <div className="mt-2 space-y-2">
+          {NEEDS_DECISION.map((t) => (
+            <ExampleTxnCard key={t.name} t={t} action="Review →" />
+          ))}
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -154,6 +200,29 @@ export function ExampleLoansNeedsActionCard() {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// /messages, when there are no conversations yet: one short thread
+// showing it's a two-way chat.
+export function ExampleConversation() {
+  return (
+    <div aria-hidden="true" data-tour="messages-list" className="card p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-display font-medium text-sm">Maria Santos</p>
+        <ExampleBadge />
+      </div>
+      <div className="flex">
+        <p className="max-w-[80%] rounded-2xl rounded-bl-sm bg-paper-2 px-3 py-2 text-sm text-ink">
+          Hi! When will my withdrawal be sent?
+        </p>
+      </div>
+      <div className="flex justify-end">
+        <p className="max-w-[80%] rounded-2xl rounded-br-sm bg-ink px-3 py-2 text-sm text-paper">
+          Sending it this afternoon. I&apos;ll attach the screenshot here.
+        </p>
       </div>
     </div>
   )
