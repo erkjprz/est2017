@@ -50,7 +50,8 @@ import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
-import { hasSeenAdminTour, isAdminTourActive, startAdminTour, useAdminTourActive } from "@/lib/adminTour"
+import { hasSeenAdminTour, isAdminTourActive, startAdminTour } from "@/lib/adminTour"
+import { useAdminTourStepId } from "@/app/components/admin/AdminTour"
 import { ExampleQueueHeading, ExampleQueueSection, ExampleSignupSection } from "@/app/components/admin/TourExamples"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
@@ -260,9 +261,12 @@ export default function AdminPage() {
   // Decided once per visit, so a later re-render can't pop it open on top
   // of something else.
   const tourDecided = useRef(false)
-  // While the tour runs, an empty queue gets example items so its
-  // spotlight has something to land on (see TourExamples).
-  const tourActive = useAdminTourActive()
+  // While the tour is on the steps about reviewing (not its first look,
+  // which shows the real, usually empty, queue, nor its last), an empty
+  // queue gets example items so the spotlight has something to land on
+  // (see TourExamples).
+  const tourStepId = useAdminTourStepId()
+  const tourExamples = tourStepId === "review" || tourStepId === "signup" || tourStepId === "fix" || tourStepId === "export"
   useEffect(() => {
     if (tourDecided.current || checkingAccess || member?.role !== "admin") return
     tourDecided.current = true
@@ -1015,8 +1019,8 @@ export default function AdminPage() {
   const activeFilter: Filter = chips.some((c) => c.id === filter) && showChips ? filter : "all"
 
   const showTxns = activeFilter === "all" || activeFilter === "txn"
-  const showQueueExample = tourActive && pendingTransactions.length === 0 && loansToClose.length === 0
-  const showSignupExample = tourActive && signupsCount === 0
+  const showQueueExample = tourExamples && pendingTransactions.length === 0 && loansToClose.length === 0
+  const showSignupExample = tourExamples && signupsCount === 0
   const showSignups = activeFilter === "all" || activeFilter === "signup"
 
   if (checkingAccess) {
@@ -1111,7 +1115,7 @@ export default function AdminPage() {
               <>
                 <span className="text-gold">{totalCount}</span> waiting on you
               </>
-            ) : tourActive ? (
+            ) : showQueueExample ? (
               <ExampleQueueHeading />
             ) : (
               "All caught up"
@@ -1155,7 +1159,7 @@ export default function AdminPage() {
                 below, so showing this too duplicated the same message. */}
             {showQueueExample && <ExampleQueueSection />}
 
-            {activeFilter === "all" && totalCount === 0 && !tourActive && (
+            {activeFilter === "all" && totalCount === 0 && !showQueueExample && !showSignupExample && (
               <div className="text-center py-16">
                 <p className="text-2xl mb-2">🌱</p>
                 <p className="text-sm text-ink-soft">

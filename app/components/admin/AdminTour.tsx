@@ -18,88 +18,103 @@ import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourStep, setAdminTourStep } from "@/l
 // them in order of preference; if none shows up the caption is centred.
 
 type Step = {
+  id: string
   path: string
   targets?: string[]
   title: string
   text: string
 }
 
+// Written as "when this happens, here's what you do" rather than rules.
 const STEPS: Step[] = [
   {
+    id: "welcome",
     path: "/admin",
     title: "Welcome, admin",
-    text: "A quick walk through the pages you'll use. Nothing members submit counts until an admin approves it."
+    text: "Here's how things flow once you're an admin. What members send in only counts once an admin approves it."
   },
   {
+    id: "queue",
     path: "/admin",
     targets: ["queue-count"],
-    title: "Your to-do list",
-    text: "Check it daily. Aim for “All caught up”."
+    title: "Your approval queue",
+    text: "When a member sends something in or someone signs up, it lands here and you get a notification."
   },
   {
+    id: "review",
     path: "/admin",
     targets: ["queue-item", "queue-count"],
-    title: "Review before approving",
-    text: "Tap an item. Match it with the bank app first. Red labels mean check twice. Rejecting? Say why."
+    title: "When something comes in",
+    text: "Tap it and match it with the bank app. If it checks out, approve it. Red labels mean look twice. If something's off, reject it with a reason so the member can fix it."
   },
   {
+    id: "signup",
     path: "/admin",
     targets: ["queue-signup", "queue-count"],
-    title: "New signups",
-    text: "Approve only people you know. Anyone can sign up."
+    title: "When someone signs up",
+    text: "They show up under New signups. Once you know who they are, approve them."
   },
   {
+    id: "fix",
     path: "/admin",
     targets: ["search-fix"],
-    title: "Fix a mistake",
-    text: "Find and correct any entry, then tell the member."
+    title: "When something was recorded wrong",
+    text: "Find it here, correct it, and let the member know what changed."
   },
   {
+    id: "export",
     path: "/admin",
     targets: ["export"],
-    title: "Backup",
-    text: "Download the full ledger once a month."
+    title: "At the end of each month",
+    text: "Download the full ledger here to keep a backup."
   },
   {
+    id: "members",
     path: "/admin/members",
     targets: ["members-add"],
-    title: "Members",
-    text: "Add people here. Tap anyone in the list to edit or deactivate them."
+    title: "When someone joins or leaves",
+    text: "Add them here. To edit or deactivate someone, tap their name in the list."
   },
   {
+    id: "lending",
     path: "/admin/lending",
     targets: ["lending-limits"],
-    title: "Lending limits",
-    text: "Every loan release is checked against these. Change them only after the admins agree."
+    title: "When a loan is requested",
+    text: "It's checked against these limits before you release it. They only change when the admins agree."
   },
   {
+    id: "messages",
     path: "/messages",
     targets: ["messages-list", "messages-title"],
-    title: "Member questions",
-    text: "Members' questions land here. Reply within a day or two."
+    title: "When a member asks a question",
+    text: "You get a notification and the question shows up here. Reply right in the thread."
   },
   {
+    id: "interest-monthly",
     path: "/dashboard",
     targets: ["new-fab"],
-    title: "Bank interest: monthly",
-    text: "When a bank credits interest, tap + → Bank Interest and attach the statement."
+    title: "When a bank credits interest",
+    text: "Record it here with + → Bank Interest, and attach the bank statement."
   },
   {
+    id: "interest-yearly",
     path: "/fund-breakdown?tab=banks",
     targets: ["bank-interest-due", "bank-total"],
-    title: "Bank interest: every January",
-    text: "Last year's interest shows up here. Open the bank → Review & distribute."
+    title: "At year end",
+    text: "All bank interest is distributed at year end. Once December's interest is in, the year's total shows up here. Open each bank and tap Review & distribute."
   },
   {
+    id: "loans",
     path: "/fund-breakdown?tab=loans",
     targets: ["loans-attention", "loans-total"],
-    title: "Loans",
-    text: "Overdue loans and paid-off loans to close show up here. Follow up with the borrower."
+    title: "When a loan is overdue or paid off",
+    text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared."
   },
   {
+    id: "done",
     path: "/admin",
     title: "You're all set",
-    text: "Replay this tour any time from Help → Admin."
+    text: "You can replay this tour any time from Help → Admin."
   }
 ]
 
@@ -128,6 +143,19 @@ function findTarget(step: Step): HTMLElement | null {
 }
 
 type Spot = { top: number; left: number; width: number; height: number; radius: number }
+
+// The id of the step the tour is on, or null when it isn't running -- for
+// pages that show example items only on some steps (see TourExamples).
+export function useAdminTourStepId(): string | null {
+  const [index, setIndex] = useState<number | null>(null)
+  useEffect(() => {
+    const update = () => setIndex(getAdminTourStep())
+    update()
+    window.addEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
+    return () => window.removeEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
+  }, [])
+  return index === null ? null : STEPS[index]?.id ?? null
+}
 
 export function AdminTourHost() {
   const { member } = useAuth()
@@ -199,7 +227,10 @@ function TourOverlay({ index, go }: { index: number; go: (next: number | null) =
       }
       // A slow page: show the caption centred meanwhile, and keep watching
       // so the spotlight still moves onto the target once it renders.
-      if (Date.now() - started > TARGET_TIMEOUT_MS) setReady(true)
+      if (Date.now() - started > TARGET_TIMEOUT_MS) {
+        measure()
+        setReady(true)
+      }
     }, 150)
     return () => window.clearInterval(timer)
   }, [step, router, measure])
