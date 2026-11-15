@@ -55,7 +55,7 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-count"],
     title: "Your approval queue",
-    text: "When a member sends something in or someone signs up, it lands here and you get an app notification.",
+    text: "Everything waiting for an admin lands here: money members send in, money they ask for, and new signups.",
     notify: "You get “Pending Approval” when a member sends something in, and “New Signup” when someone signs up."
   },
   {
@@ -63,7 +63,7 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-confirmed", "queue-decision", "queue-count"],
     title: "When something comes in",
-    text: "Tap it and match it with the bank app. If it checks out, approve it. Red labels mean look twice.",
+    text: "Contributions and loan payments are money already in the bank, so they only need confirming. Red labels flag something to look at twice.",
     topic: "Approving money in"
   },
   {
@@ -73,15 +73,15 @@ const STEPS: Step[] = [
     via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Contribution",
     text: "Check the amount, date and bank against the bank app and the member's receipt below. No receipt? Ask for one first. Above Approve you'll see the bank's balance after.",
-    notify: "When you approve, the member gets “Contribution Approved”. If you reject, they get “Contribution Not Approved” with your reason."
+    notify: "Approving sends the member “Contribution Approved”. Rejecting sends “Contribution Not Approved” with your reason."
   },
   {
     id: "form-loan-payment",
     path: "/admin",
     targets: ["review-form"],
-    via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Every item opens a form to check before you approve.", optional: true }],
+    via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "A loan payment's form also shows what's left on the loan.", optional: true }],
     title: "Loan payment",
-    text: "The line at the top shows what's left on the loan. Check the amount landed in the bank shown and matches the member's receipt, then approve. It comes off what's owed.",
+    text: "The line at the top shows what's left on the loan. Check that the amount reached the bank shown and matches the member's receipt, then approve. It comes off what's owed.",
     notify: "The member gets “Loan Payment Approved”, and payment reminders for that due date stop."
   },
   {
@@ -89,24 +89,24 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-decision", "queue-confirmed", "queue-count"],
     title: "When money goes out",
-    text: "Withdrawals, loan releases and investment returns are reviewed one at a time: pick the bank the money left from and attach proof. If something's off, reject it with a reason so the member can fix it.",
+    text: "Withdrawals, loan releases and investment returns are reviewed one at a time. For withdrawals and loans, you send the money yourself before approving.",
     topic: "Approving money out",
-    notify: "Rejecting sends “Not Approved” with your reason. When they fix it and resend, you're notified again."
+    notify: "After you reject something, the member can fix it and resend it, and you're notified again."
   },
   {
     id: "form-withdrawal",
     path: "/admin",
     targets: ["review-form"],
-    via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Every item opens a form to check before you approve.", optional: true }],
+    via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Money going out has a little more to fill in.", optional: true }],
     title: "Withdrawal",
-    text: "Check the amount and that they have enough available. Send it to the account under Send to, then pick the bank it left from here and attach the transfer screenshot. Approve once both are in.",
-    notify: "The member gets “Withdrawal Approved” once you approve."
+    text: "Check the amount against what they have available, shown at the top. Send it to the account under Send to, then pick the bank it left from and attach the transfer screenshot. Approve once both are in.",
+    notify: "The member gets “Withdrawal Approved”."
   },
   {
     id: "form-loan-release",
     path: "/admin",
     targets: ["review-terms", "review-form"],
-    via: [{ path: "/admin", target: "example-loan-release", title: "Tap Ben's loan request", hint: "Every item opens a form to check before you approve.", optional: true }],
+    via: [{ path: "/admin", target: "example-loan-release", title: "Tap Ben's loan request", hint: "A loan request has its terms to check first.", optional: true }],
     title: "Loan request: the terms",
     text: "Check the interest, term and first payment date. You can change them and Save. The fund check below shows if it fits the lending limits."
   },
@@ -122,7 +122,7 @@ const STEPS: Step[] = [
     id: "form-investment-return",
     path: "/admin",
     targets: ["review-form"],
-    via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", hint: "Every item opens a form to check before you approve.", optional: true }],
+    via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", hint: "The last kind of item in the queue.", optional: true }],
     title: "Investment return",
     text: "Check the investment and the amount against the bank shown and the receipt. Then approve.",
     notify: "If a member sent it in, they get “Investment Return Approved”."
@@ -132,7 +132,7 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-signup", "queue-count"],
     title: "When someone signs up",
-    text: "They show up under New signups. Once you know who they are, approve them.",
+    text: "Members show up under New signups, borrowers under Borrower requests. Once you know who they are, approve them.",
     topic: "Signups"
   },
   {
@@ -160,13 +160,34 @@ const STEPS: Step[] = [
     topic: "Members"
   },
   {
+    id: "lending-available",
+    path: "/admin/lending",
+    targets: ["lending-available"],
+    via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "The bar-chart icon, next to Members." }],
+    title: "Available to lend",
+    text: "How much more can go out on loan: the Total loans limit's share of the fund, minus what's already out. The bar fills as loans go out.",
+    topic: "Lending limits"
+  },
+  {
     id: "lending",
     path: "/admin/lending",
     targets: ["lending-limits"],
-    via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "The bar-chart icon, next to Members." }],
     title: "When a loan is requested",
-    text: "It's checked against these limits before you release it. They only change when everyone agrees.",
-    topic: "Lending limits"
+    text: "Each request is checked against these limits. Going over shows a warning on the request but doesn't block it. Change the limits only when everyone agrees."
+  },
+  {
+    id: "lending-borrowers",
+    path: "/admin/lending",
+    targets: ["lending-borrowers"],
+    title: "Borrowers",
+    text: "Each borrower's unpaid loans plus any pending request, as a share of the fund. A share in red is over the Per borrower limit."
+  },
+  {
+    id: "lending-holds",
+    path: "/admin/lending",
+    targets: ["lending-holds"],
+    title: "Member holds",
+    text: "When a loan goes out, each member's share of it is on hold until it's repaid. The same goes for money in investments. This shows how much of each member's value is on hold; they can't withdraw that part. The Member hold limit warns when a loan would tie up too much of anyone's money."
   },
   {
     id: "messages",
@@ -174,7 +195,7 @@ const STEPS: Step[] = [
     targets: ["messages-list", "messages-title"],
     via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon", hint: "The chat bubble at the top of Admin opens every conversation." }],
     title: "When you or a member asks a question",
-    text: "It's a chat: a member can message the admins, and you can message a member. You get a notification, the conversation shows up here, and you reply right in the thread.",
+    text: "It's a chat: members can message the admins, and you can message a member. Every conversation is here, and you reply right in the thread.",
     topic: "Member questions",
     notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”."
   },
@@ -183,11 +204,11 @@ const STEPS: Step[] = [
     path: "/dashboard",
     targets: ["type-bank_interest"],
     via: [
-      { path: "/dashboard", target: "new-fab", title: "Tap +", hint: "Everything you record starts here, on the Dashboard." },
+      { path: "/dashboard", target: "new-fab", title: "Tap +", hint: "Everything you record yourself starts here, on the Dashboard." },
       { target: "tx-type", title: "Tap Type", hint: "Choose what you're recording." }
     ],
     title: "When a bank credits interest",
-    text: "Record it here with + → Bank Interest, and attach a screenshot.",
+    text: "Pick Bank Interest, choose the bank and attach a screenshot of the statement.",
     topic: "Bank interest"
   },
   {
@@ -195,11 +216,11 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=banks",
     targets: ["bank-interest-due", "bank-total"],
     via: [
-      { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown", hint: "In the bottom bar. Bank interest lives here." },
+      { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown", hint: "In the bottom bar: the fund's banks, loans and investments." },
       { target: "tab-banks", title: "Tap the Banks tab", hint: "Each bank's balance and interest." }
     ],
     title: "At year end",
-    text: "All bank interest is distributed at year end. Once December's interest is in, the year's total shows up here. Open each bank and tap Review & distribute."
+    text: "Bank interest is shared out once a year. In January, once December's interest is in for every bank, last year's total shows up here. Open each bank and tap Review & distribute."
   },
   {
     id: "interest-share",
@@ -232,7 +253,7 @@ const STEPS: Step[] = [
     targets: ["example-split"],
     via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab", hint: "Every venture the fund has put money into." }],
     title: "When an investment makes or loses money",
-    text: "Open it and tap Review & distribute. The gain, or loss, is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
+    text: "Open it and tap Review & distribute. The gain or loss is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
     topic: "Investments",
     notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”."
   },
