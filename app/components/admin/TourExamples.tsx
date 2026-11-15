@@ -52,12 +52,12 @@ type ExampleTxn = {
 // the real one is: money already in the bank (approve in a batch) vs money
 // going out or anything that needs checking one at a time.
 const CONFIRMED: ExampleTxn[] = [
-  { key: "contribution", name: "Maria Santos", arrow: "↑", tone: "in", line: "Contribution · BDO", amount: "₱1,000.00", flags: ["No receipt", "Possible duplicate"] },
+  { key: "contribution", name: "Maria Santos", arrow: "↑", tone: "in", line: "Contribution · BDO", amount: "₱1,000.00", flags: ["Possible duplicate"] },
   { key: "loan-payment", name: "Ana Cruz", arrow: "↑", tone: "in", line: "Loan Payment · Maya", amount: "₱2,150.00" }
 ]
 const NEEDS_DECISION: ExampleTxn[] = [
-  { key: "withdrawal", name: "Jose Reyes", arrow: "↓", tone: "out", line: "Withdrawal · pick the disbursing bank", amount: "₱5,000.00", flags: ["Over balance"] },
-  { key: "loan-release", name: "Ben Garcia", arrow: "↓", tone: "out", line: "Loan Release · requested", amount: "₱20,000.00", flags: ["Over borrower limit by ₱2,000.00"] },
+  { key: "withdrawal", name: "Jose Reyes", arrow: "↓", tone: "out", line: "Withdrawal · pick the disbursing bank", amount: "₱5,000.00" },
+  { key: "loan-release", name: "Ben Garcia", arrow: "↓", tone: "out", line: "Loan Release · requested", amount: "₱20,000.00" },
   { key: "investment-return", name: "Fund", arrow: "↑", tone: "in", line: "Investment Return · Rice trading", amount: "₱3,600.00" }
 ]
 
@@ -173,8 +173,8 @@ export function ExampleInterestDueCard() {
 // Breakdown → Loans' "Needs action" card.
 export function ExampleLoansNeedsActionCard() {
   const rows = [
-    { loan: "Ana · Tuition loan", label: "Payment 12 days overdue", tone: "text-rust", amount: "₱8,000.00" },
-    { loan: "Ben · Business loan", label: "Ready to close", tone: "text-sage", amount: "+₱600.00" }
+    { loan: "Ana · Tuition loan", label: "Payment 12 days overdue", tone: "text-rust", amount: "₱6,450.00" },
+    { loan: "Lea · Business loan", label: "Ready to close", tone: "text-sage", amount: "+₱600.00" }
   ]
   return (
     <div aria-hidden="true" data-tour="loans-attention" className="card mb-6">
@@ -260,6 +260,7 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
     description: null,
     receipt_urls: [] as string[],
     example_context: null as string | null,
+    example_flags: [] as string[],
     submitted_by_member: null,
     bank_accounts: null,
     bank_account_id: null,
@@ -279,7 +280,8 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
         classification: "Member Contribution",
         amount: 1000,
         members: { name: "Maria Santos", email: "maria@email.com" },
-        receipt_urls: ["/tour/example-receipt-contribution.png"]
+        receipt_urls: ["/tour/example-receipt-contribution.png"],
+        example_flags: ["Possible duplicate"]
       }
     case "form-loan-payment":
       return {

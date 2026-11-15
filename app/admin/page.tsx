@@ -409,7 +409,10 @@ export default function AdminPage() {
 
   // What the admin should notice before approving -- each one a short chip
   // on the queue card and a line in the review sheet.
-  function flagsFor(t: QueueTxn): QueueFlag[] {
+  function flagsFor(t: QueueTxn & { example_flags?: string[] }): QueueFlag[] {
+    // The admin tour's example forms carry the same labels their example
+    // queue cards show (see TourExamples).
+    if (t.example_flags) return t.example_flags.map((label) => ({ label, tone: "warn" as const }))
     const flags: QueueFlag[] = []
     const amount = Number(t.amount)
     const isIn = FLOW[t.classification]?.tone === "in"
