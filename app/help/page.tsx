@@ -7,7 +7,7 @@ import Navbar from "@/app/components/Navbar"
 import BorrowerHeader from "@/app/components/BorrowerHeader"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
-import { ADMIN_TOUR_REPLAY_PATH } from "@/lib/adminTour"
+import { startAdminTour } from "@/lib/adminTour"
 
 type Tab = "members" | "borrowers" | "admin"
 
@@ -911,7 +911,9 @@ export default function HelpPage() {
           {activeTab === "admin" && member?.role === "admin" && !trimmedQuery && (
             <button
               type="button"
-              onClick={() => router.push(ADMIN_TOUR_REPLAY_PATH)}
+              // Starts it right here; the tour itself takes the admin to
+              // /admin for its first step.
+              onClick={() => startAdminTour()}
               className="mt-5 w-full card flex items-center gap-3 px-4 py-3 text-left"
             >
               <div className="min-w-0 flex-1">

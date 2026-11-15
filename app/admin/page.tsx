@@ -254,8 +254,8 @@ export default function AdminPage() {
   const [lendingPosition, setLendingPosition] = useState<LendingPosition | null>(null)
 
   // First-visit guided tour for a new admin (see AdminTour, mounted in the
-  // root layout). Starts once per device, or again via /admin?tour=1 from
-  // Help. Its spotlight targets are the data-tour="..." attributes below.
+  // root layout). Starts by itself once per device; Help starts it again
+  // directly. Its spotlight targets are the data-tour="..." attributes below.
   // Decided once per visit, so a later re-render can't pop it open on top
   // of something else.
   const tourDecided = useRef(false)
@@ -269,15 +269,11 @@ export default function AdminPage() {
     if (tourDecided.current || checkingAccess || member?.role !== "admin") return
     tourDecided.current = true
     const params = new URLSearchParams(window.location.search)
-    const replay = params.get("tour") === "1"
-    if (replay) {
-      params.delete("tour")
-      const qs = params.toString()
-      window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`)
-    }
+    // Never restart a tour that's already running: this only runs once the
+    // queue has loaded, by which point the admin may have moved on in it.
     // A ?signup= / ?review= link is there to open one item's review sheet
     // (see below) -- don't cover it with the tour; it'll show next visit.
-    if (!replay && (hasSeenAdminTour() || isAdminTourActive() || params.has("signup") || params.has("review"))) return
+    if (hasSeenAdminTour() || isAdminTourActive() || params.has("signup") || params.has("review")) return
     startAdminTour()
   }, [checkingAccess, member])
 

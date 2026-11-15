@@ -463,7 +463,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       if (playVia) {
         for (const v of step.via ?? []) {
           if (v.path) await ensurePage(v.path)
-          const el = await waitFor(() => findTarget([v.target]), v.optional ? 1500 : 5000)
+          // A page that's still loading (Admin's header icons wait for its
+          // queue) gets longer before the tap is skipped.
+          const el = await waitFor(() => findTarget([v.target]), v.optional ? 1500 : 10000)
           if (cancelled) return
           if (!el) break
           point(el)
