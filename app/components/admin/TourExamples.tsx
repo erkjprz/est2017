@@ -39,6 +39,7 @@ export function ExampleQueueHeading() {
 }
 
 type ExampleTxn = {
+  key: string
   name: string
   arrow: string
   tone: "in" | "out"
@@ -51,18 +52,18 @@ type ExampleTxn = {
 // the real one is: money already in the bank (approve in a batch) vs money
 // going out or anything that needs checking one at a time.
 const CONFIRMED: ExampleTxn[] = [
-  { name: "Maria Santos", arrow: "↑", tone: "in", line: "Contribution · BDO", amount: "₱1,000.00", flags: ["No receipt", "Possible duplicate"] },
-  { name: "Ana Cruz", arrow: "↑", tone: "in", line: "Loan Payment · Maya", amount: "₱2,150.00" }
+  { key: "contribution", name: "Maria Santos", arrow: "↑", tone: "in", line: "Contribution · BDO", amount: "₱1,000.00", flags: ["No receipt", "Possible duplicate"] },
+  { key: "loan-payment", name: "Ana Cruz", arrow: "↑", tone: "in", line: "Loan Payment · Maya", amount: "₱2,150.00" }
 ]
 const NEEDS_DECISION: ExampleTxn[] = [
-  { name: "Jose Reyes", arrow: "↓", tone: "out", line: "Withdrawal · pick the disbursing bank", amount: "₱5,000.00", flags: ["Over balance"] },
-  { name: "Ben Garcia", arrow: "↓", tone: "out", line: "Loan Release · requested", amount: "₱20,000.00", flags: ["Over borrower limit by ₱2,000.00"] },
-  { name: "Fund", arrow: "↑", tone: "in", line: "Investment Return · Rice trading", amount: "₱3,600.00" }
+  { key: "withdrawal", name: "Jose Reyes", arrow: "↓", tone: "out", line: "Withdrawal · pick the disbursing bank", amount: "₱5,000.00", flags: ["Over balance"] },
+  { key: "loan-release", name: "Ben Garcia", arrow: "↓", tone: "out", line: "Loan Release · requested", amount: "₱20,000.00", flags: ["Over borrower limit by ₱2,000.00"] },
+  { key: "investment-return", name: "Fund", arrow: "↑", tone: "in", line: "Investment Return · Rice trading", amount: "₱3,600.00" }
 ]
 
 function ExampleTxnCard({ t, action }: { t: ExampleTxn; action: string }) {
   return (
-    <div className="card overflow-hidden flex items-center gap-3 px-4 py-3">
+    <div data-tour={`example-${t.key}`} className="card overflow-hidden flex items-center gap-3 px-4 py-3">
       <FlowBadge arrow={t.arrow} tone={t.tone} small />
       <span className="min-w-0 flex-1">
         <span className="block font-display font-medium truncate text-sm">{t.name}</span>
@@ -94,7 +95,7 @@ export function ExampleQueueSection() {
         <p className="mt-1 text-xs text-ink-soft">Already in the bank — just confirm.</p>
         <div className="mt-2 space-y-2">
           {CONFIRMED.map((t) => (
-            <ExampleTxnCard key={t.name} t={t} action="Reject" />
+            <ExampleTxnCard key={t.key} t={t} action="Reject" />
           ))}
         </div>
       </section>
@@ -106,7 +107,7 @@ export function ExampleQueueSection() {
         <p className="mt-1 text-xs text-ink-soft">Money going out needs a bank and proof of transfer.</p>
         <div className="mt-2 space-y-2">
           {NEEDS_DECISION.map((t) => (
-            <ExampleTxnCard key={t.name} t={t} action="Review →" />
+            <ExampleTxnCard key={t.key} t={t} action="Review →" />
           ))}
         </div>
       </section>
@@ -226,4 +227,108 @@ export function ExampleConversation() {
       </div>
     </div>
   )
+}
+
+// ---- Review forms ----
+//
+// The admin tour opens the real review sheet on /admin for one example of
+// each transaction type (see AdminTour's form-* steps), so a new admin sees
+// exactly which fields each form has. These are the made-up transactions
+// it opens; their ids start with EXAMPLE_TXN_PREFIX, which the page's
+// approve/reject/save actions refuse, and the tour's overlay blocks taps on
+// the form anyway. The bank is a real one, so the "bank balance after"
+// preview above Approve reads true.
+
+export const EXAMPLE_TXN_PREFIX = "example-"
+
+type Bank = { id: string; bank_name: string; account_name: string | null }
+
+export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
+  const bank = banks[0] ?? null
+  const now = new Date()
+  const today = now.toISOString().slice(0, 10)
+  const base = {
+    member_id: null,
+    loan_id: null,
+    investment_id: null,
+    status: "pending",
+    txn_date: today,
+    created_at: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+    description: null,
+    receipt_urls: [],
+    submitted_by_member: null,
+    bank_accounts: null,
+    bank_account_id: null,
+    loans: null,
+    investments: null,
+    payout_details: null,
+    payout_qr_path: null,
+    affects_cash: 1
+  }
+  const inBank = { bank_account_id: bank?.id ?? null, bank_accounts: bank }
+  switch (stepId) {
+    case "form-contribution":
+      return {
+        ...base,
+        ...inBank,
+        transaction_id: `${EXAMPLE_TXN_PREFIX}contribution`,
+        classification: "Member Contribution",
+        amount: 1000,
+        members: { name: "Maria Santos", email: "maria@email.com" },
+        description: "November contribution"
+      }
+    case "form-loan-payment":
+      return {
+        ...base,
+        ...inBank,
+        transaction_id: `${EXAMPLE_TXN_PREFIX}loan-payment`,
+        classification: "Loan Repayment",
+        amount: 2150,
+        members: { name: "Ana Cruz", email: "ana@email.com" },
+        description: "Tuition loan, payment 3 of 6"
+      }
+    case "form-withdrawal":
+      return {
+        ...base,
+        transaction_id: `${EXAMPLE_TXN_PREFIX}withdrawal`,
+        classification: "Member Withdrawal",
+        amount: -5000,
+        members: { name: "Jose Reyes", email: "jose@email.com" },
+        payout_details: "GCash · Jose Reyes\n0917 123 4567"
+      }
+    case "form-loan-release":
+    case "form-loan-release-send":
+      return {
+        ...base,
+        transaction_id: `${EXAMPLE_TXN_PREFIX}loan-release`,
+        classification: "Loan Release",
+        amount: -20000,
+        members: { name: "Ben Garcia", email: "ben@email.com" },
+        description: "For the store's opening stock",
+        loans: {
+          interest_type: "rate",
+          interest_rate: 5,
+          interest_amount: null,
+          term_months: 6,
+          repayment_frequency: "monthly",
+          due_day: 15,
+          payments_start_date: null,
+          payout_details: "BDO · Ben Garcia\n0012 3456 7890",
+          payout_qr_path: null
+        }
+      }
+    case "form-investment-return":
+      return {
+        ...base,
+        ...inBank,
+        transaction_id: `${EXAMPLE_TXN_PREFIX}investment-return`,
+        classification: "Investment Return",
+        amount: 3600,
+        members: null,
+        investments: { name: "Rice trading" },
+        description: "October sales share"
+      }
+    default:
+      return null
+  }
 }

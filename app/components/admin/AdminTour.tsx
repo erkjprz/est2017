@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { useRouter } from "next/navigation"
 import { Portal } from "@/app/components/Portal"
 import { useAuth } from "@/app/auth-context"
-import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourStep, setAdminTourStep } from "@/lib/adminTour"
+import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourPhase, getAdminTourStep, setAdminTourPhase, setAdminTourStep } from "@/lib/adminTour"
 
 // Guided tour for a new admin. It walks across the pages an admin works in,
 // dims each one, spotlights the real control, and puts a short caption next
@@ -22,7 +22,9 @@ import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourStep, setAdminTourStep } from "@/l
 // and waits -- as long as they like -- for them to tap it (or the caption's
 // button). Then it clicks it for real: an icon opening its page, + opening
 // the entry sheet, a tab switching. Only asked when moving forward.
-type Via = { path?: string; target: string; title: string; hint: string }
+// `optional`: the target may well not be there (an example card that only
+// shows when the real queue is empty) -- don't wait long for it.
+type Via = { path?: string; target: string; title: string; hint: string; optional?: boolean }
 
 type Step = {
   id: string
@@ -56,11 +58,58 @@ const STEPS: Step[] = [
     text: "Tap it and match it with the bank app. If it checks out, approve it. Red labels mean look twice."
   },
   {
+    id: "form-contribution",
+    path: "/admin",
+    targets: ["review-form"],
+    via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Every item opens a form to check before you approve.", optional: true }],
+    title: "Contribution",
+    text: "Check the amount and date against the bank app, and that the member's receipt shows the transfer. No receipt? Ask for one first. Above Approve you'll see the bank's balance after."
+  },
+  {
+    id: "form-loan-payment",
+    path: "/admin",
+    targets: ["review-form"],
+    via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Every item opens a form to check before you approve.", optional: true }],
+    title: "Loan payment",
+    text: "Check the amount landed in the bank shown, and the note says which loan and payment it is. Then approve; it comes off what's owed."
+  },
+  {
     id: "review-out",
     path: "/admin",
     targets: ["queue-decision", "queue-confirmed", "queue-count"],
     title: "When money goes out",
     text: "Withdrawals, loan releases and investment returns are reviewed one at a time: pick the bank the money left from and attach proof. If something's off, reject it with a reason so the member can fix it."
+  },
+  {
+    id: "form-withdrawal",
+    path: "/admin",
+    targets: ["review-form"],
+    via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Every item opens a form to check before you approve.", optional: true }],
+    title: "Withdrawal",
+    text: "Check the amount and that they have enough available. Send it to the account under Send to, then pick the bank it left from here and attach the transfer screenshot. Approve once both are in."
+  },
+  {
+    id: "form-loan-release",
+    path: "/admin",
+    targets: ["review-terms", "review-form"],
+    via: [{ path: "/admin", target: "example-loan-release", title: "Tap Ben's loan request", hint: "Every item opens a form to check before you approve.", optional: true }],
+    title: "Loan request: the terms",
+    text: "Check the interest, term and first payment date. You can change them and Save. The fund check below shows if it fits the lending limits."
+  },
+  {
+    id: "form-loan-release-send",
+    path: "/admin",
+    targets: ["review-details", "review-form"],
+    title: "Loan request: sending it",
+    text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. Approve & activate starts the loan today."
+  },
+  {
+    id: "form-investment-return",
+    path: "/admin",
+    targets: ["review-form"],
+    via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", hint: "Every item opens a form to check before you approve.", optional: true }],
+    title: "Investment return",
+    text: "Check the investment and the amount against the bank shown and the receipt. Then approve."
   },
   {
     id: "signup",
@@ -182,25 +231,34 @@ function findTarget(targets: string[] | undefined): HTMLElement | null {
 // has room below it.
 function reveal(el: HTMLElement) {
   const r = el.getBoundingClientRect()
-  if (r.height > window.innerHeight * 0.45) window.scrollBy({ top: r.top - 72, behavior: "smooth" })
-  else el.scrollIntoView({ block: "center", behavior: "smooth" })
+  if (r.height > window.innerHeight * 0.45) {
+    // Works inside a scrolling sheet too, unlike scrolling the window.
+    el.style.scrollMarginTop = "72px"
+    el.scrollIntoView({ block: "start", behavior: "smooth" })
+  } else el.scrollIntoView({ block: "center", behavior: "smooth" })
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-type Spot = { top: number; left: number; width: number; height: number; radius: number }
+type Spot = { top: number; left: number; width: number; height: number; radius: number; inSheet: boolean }
 
-// The id of the step the tour is on, or null when it isn't running -- for
-// pages that show example items only on some steps (see TourExamples).
-export function useAdminTourStepId(): string | null {
-  const [index, setIndex] = useState<number | null>(null)
+// The step the tour is on (null id when it isn't running), and whether
+// it's past the tap that leads to it -- for pages that show example items
+// or open example forms on some steps (see TourExamples).
+export function useAdminTourStep(): { id: string | null; showing: boolean } {
+  const [state, setState] = useState<{ index: number | null; phase: "via" | "show" }>({ index: null, phase: "show" })
   useEffect(() => {
-    const update = () => setIndex(getAdminTourStep())
+    const update = () => setState({ index: getAdminTourStep(), phase: getAdminTourPhase() })
     update()
     window.addEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
     return () => window.removeEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
   }, [])
-  return index === null ? null : STEPS[index]?.id ?? null
+  const id = state.index === null ? null : STEPS[state.index]?.id ?? null
+  return { id, showing: state.phase === "show" }
+}
+
+export function useAdminTourStepId(): string | null {
+  return useAdminTourStep().id
 }
 
 export function AdminTourHost() {
@@ -261,7 +319,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       left: r.left - PAD,
       width: r.width + PAD * 2,
       height: r.height + PAD * 2,
-      radius: radius >= r.height / 2 ? 9999 : radius + PAD
+      radius: radius >= r.height / 2 ? 9999 : radius + PAD,
+      inSheet: !!el.closest("[data-sheet]")
     })
   }, [])
 
@@ -294,10 +353,11 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     }
 
     async function run() {
+      setAdminTourPhase(playVia && step.via?.length ? "via" : "show")
       if (playVia) {
         for (const v of step.via ?? []) {
           if (v.path) await ensurePage(v.path)
-          const el = await waitFor(() => findTarget([v.target]), 5000)
+          const el = await waitFor(() => findTarget([v.target]), v.optional ? 1500 : 5000)
           if (cancelled) return
           if (!el) break
           point(el)
@@ -323,6 +383,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       }
 
       if (cancelled) return
+      setAdminTourPhase("show")
       await ensurePage(step.path)
       if (!step.targets) {
         point(null)
@@ -395,11 +456,14 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           ? { left, top: spot.top + spot.height + gap, width: cardWidth, maxHeight: roomBelow }
           : { left, bottom: viewport.h - spot.top + gap, width: cardWidth, maxHeight: roomAbove }
     } else {
-      // Too tall to caption beside (e.g. a whole list of examples): pin the
-      // caption to the bottom of the screen, over the end of the spotlight.
+      // Too tall to caption beside: pin the caption to a screen edge. In a
+      // sheet (the review forms) that's the top -- over the form's title --
+      // so its Approve button and bank line stay in view; on a page (the
+      // queue examples) whichever edge is further from the spotlight.
+      const pinTop = spot.inSheet || spot.top + spot.height / 2 > viewport.h / 2
       cardStyle = {
         left: (viewport.w - cardWidth) / 2,
-        bottom: MARGIN + 8,
+        ...(pinTop ? { top: MARGIN + 8 } : { bottom: MARGIN + 8 }),
         width: cardWidth,
         maxHeight: viewport.h / 2
       }

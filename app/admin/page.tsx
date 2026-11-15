@@ -51,8 +51,14 @@ import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
 import { hasSeenAdminTour, isAdminTourActive, startAdminTour } from "@/lib/adminTour"
-import { useAdminTourStepId } from "@/app/components/admin/AdminTour"
-import { ExampleQueueHeading, ExampleQueueSection, ExampleSignupSection } from "@/app/components/admin/TourExamples"
+import { useAdminTourStep } from "@/app/components/admin/AdminTour"
+import {
+  EXAMPLE_TXN_PREFIX,
+  ExampleQueueHeading,
+  ExampleQueueSection,
+  ExampleSignupSection,
+  exampleReviewTxn
+} from "@/app/components/admin/TourExamples"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -265,8 +271,8 @@ export default function AdminPage() {
   // which shows the real, usually empty, queue, nor its last), an empty
   // queue gets example items so the spotlight has something to land on
   // (see TourExamples).
-  const tourStepId = useAdminTourStepId()
-  const tourExamples = ["review-in", "review-out", "signup", "fix", "export"].includes(tourStepId ?? "")
+  const { id: tourStepId, showing: tourStepShowing } = useAdminTourStep()
+  const tourExamples = tourStepId !== null && ["review-", "form-", "signup", "fix", "export"].some((p) => tourStepId.startsWith(p))
   useEffect(() => {
     if (tourDecided.current || checkingAccess || member?.role !== "admin") return
     tourDecided.current = true
@@ -679,6 +685,7 @@ export default function AdminPage() {
   }
 
   async function rejectTransaction(transactionId: string, reason: string) {
+    if (transactionId.startsWith(EXAMPLE_TXN_PREFIX)) return
     const txn = pendingTransactions.find((t) => t.transaction_id === transactionId)
     const isLoanRelease = txn?.classification === "Loan Release" && txn.loan_id
 
@@ -757,6 +764,7 @@ export default function AdminPage() {
   // own "Approve" button below -- a lone pending item skips ticking a
   // checkbox entirely and calls this directly with just its own id.
   async function approveBulkIds(ids: string[]) {
+    ids = ids.filter((id) => !id.startsWith(EXAMPLE_TXN_PREFIX))
     if (ids.length === 0) return
     setBulkApproving(true)
     setActionError("")
@@ -807,6 +815,7 @@ export default function AdminPage() {
   // and loans.principal (positive) -- both need to move together.
   async function saveTransactionEdit(t: any) {
     const id = t.transaction_id
+    if (id.startsWith(EXAMPLE_TXN_PREFIX)) return
     const amountStr = editAmounts[id]
     const newAmount = amountStr !== undefined && amountStr !== "" ? Number(amountStr) : Math.abs(Number(t.amount))
     if (!Number.isFinite(newAmount) || newAmount <= 0) return
@@ -982,7 +991,11 @@ export default function AdminPage() {
   const reviewTransactions = pendingTransactions.filter((t) => !BULK_CLASSIFICATIONS.has(t.classification))
   // Any pending row opens the review sheet -- Confirmed money rows too, so
   // every item can be checked (date, notes, receipt, bank effect) the same way.
-  const reviewingTxn = pendingTransactions.find((t) => t.transaction_id === reviewingTxnId) ?? null
+  // On its form-* steps the admin tour opens this same review sheet for a
+  // made-up transaction of that type (see TourExamples) -- inert, since the
+  // actions below refuse example ids.
+  const tourFormTxn = tourStepShowing ? exampleReviewTxn(tourStepId, banks) : null
+  const reviewingTxn = tourFormTxn ?? pendingTransactions.find((t) => t.transaction_id === reviewingTxnId) ?? null
   // Confirmed money rows have no sheet of their own to nest a reject prompt
   // inside (they're plain rows in the page, not opened via a sheet the way
   // everything else here is) -- rejectingId doubles as which row's own
@@ -1687,7 +1700,7 @@ export default function AdminPage() {
 
         return (
           <Sheet
-            title="Review transaction"
+            title={tourFormTxn ? "Review transaction · Example" : "Review transaction"}
             onClose={() => {
               setReviewingTxnId(null)
               setApproveTriedId(null)
@@ -1698,6 +1711,8 @@ export default function AdminPage() {
             }}
             footer={footer}
           >
+            {/* data-tour: what the admin tour's form-* steps point at. */}
+            <div data-tour="review-form">
             <div className="card overflow-hidden">
               <FieldRow icon={<FlowBadge {...(FLOW[t.classification] ?? { arrow: "•", tone: "out" })} small />}>
                 <span className="flex-1 min-w-0 text-sm">
@@ -1741,7 +1756,7 @@ export default function AdminPage() {
               const termValue = editTermMonths[id] ?? String(t.loans?.term_months ?? "")
               const paymentsStartValue = editPaymentsStart[id] ?? (t.loans?.payments_start_date ?? "")
               return (
-                <div className="-mt-2 mb-4">
+                <div data-tour="review-terms" className="-mt-2 mb-4">
                   <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Loan terms</p>
                   <div className="card divide-y divide-hairline overflow-hidden">
                     <FieldRow icon={<InterestIcon />}>
@@ -1899,7 +1914,7 @@ export default function AdminPage() {
             )}
 
             {needsAdminProof && (
-            <div>
+            <div data-tour="review-details">
               <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Details</p>
               <div className="card divide-y divide-hairline overflow-hidden">
                 {needsWithdrawalBank && (
@@ -2029,6 +2044,7 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+            </div>
           </Sheet>
         )
       })()}

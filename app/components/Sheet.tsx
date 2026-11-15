@@ -248,7 +248,9 @@ export function Sheet({
       {/* Its own independent `position: fixed; bottom: 0` element, not
           `absolute` inside a full-height wrapper -- see the comment on
           the backdrop above. */}
+      {/* data-sheet: lets the admin tour tell a target inside a sheet. */}
       <div
+        data-sheet=""
         className={`fixed left-0 right-0 bottom-0 z-50 max-h-[92dvh] flex flex-col bg-(--sheet-bg) border-t border-hairline rounded-t-2xl overflow-hidden shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
           open ? "translate-y-0" : "translate-y-full"
         }`}

@@ -52,6 +52,22 @@ export function setAdminTourStep(step: number | null) {
   window.dispatchEvent(new Event(ADMIN_TOUR_CHANGE_EVENT))
 }
 
+// Whether the current step is still waiting for the admin to tap the
+// control that leads to it ("via"), or showing the step itself ("show").
+// Lets a page hold off what the step reveals -- the tour's review forms --
+// until that tap.
+let phase: "via" | "show" = "show"
+
+export function getAdminTourPhase() {
+  return phase
+}
+
+export function setAdminTourPhase(next: "via" | "show") {
+  if (next === phase) return
+  phase = next
+  window.dispatchEvent(new Event(ADMIN_TOUR_CHANGE_EVENT))
+}
+
 export function isAdminTourActive(): boolean {
   return getAdminTourStep() !== null
 }
