@@ -201,6 +201,14 @@ const STEPS: Step[] = [
     text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund."
   },
   {
+    id: "investments-share",
+    path: "/fund-breakdown?tab=investments",
+    targets: ["example-split"],
+    via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab", hint: "Every venture the fund has put money into." }],
+    title: "When an investment makes or loses money",
+    text: "Open it and tap Review & distribute. The gain, or loss, is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in."
+  },
+  {
     id: "done",
     path: "/admin",
     title: "You're all set",

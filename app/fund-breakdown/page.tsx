@@ -2314,6 +2314,9 @@ function InvestmentsPanel({
   onInvestmentClosed?: () => void
 }) {
   const cachedInvestments = readCache<Investment[]>(INVESTMENTS_CACHE_KEY)
+  // The admin tour's step on how an investment's gain or loss is shared
+  // shows an example split here.
+  const tourShowsSplit = useAdminTourStepId() === "investments-share"
   const [loading, setLoading] = useState(!cachedInvestments)
   const [investments, setInvestments] = useState<Investment[]>(cachedInvestments ?? [])
   const [loadError, setLoadError] = useState("")
@@ -2459,6 +2462,8 @@ function InvestmentsPanel({
       {showAddSheet && (
         <InvestmentDetailsSheet investment={null} onClose={() => setShowAddSheet(false)} onSaved={load} />
       )}
+
+      {isAdmin && tourShowsSplit && <ExampleGainSplit total={3600} asOf="on the date you distribute" />}
 
       {!loadError && needsDistribution.length > 0 && (
         <div className="card mb-4">
