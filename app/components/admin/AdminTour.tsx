@@ -1,15 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react"
 import { useRouter } from "next/navigation"
 import { Portal } from "@/app/components/Portal"
 import { useAuth } from "@/app/auth-context"
-import { ADMIN_TOUR_START_EVENT, getAdminTourStep, setAdminTourStep } from "@/lib/adminTour"
+import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourStep, setAdminTourStep } from "@/lib/adminTour"
 
 // Guided tour for a new admin. It walks across the pages an admin works in,
 // dims each one, spotlights the real control, and puts a short caption next
-// to it -- with an example card where the real one may not be on screen
-// yet (warning labels, signups, interest to distribute, overdue loans).
+// to it. Where the real list is empty (nothing waiting for approval, no
+// interest to distribute, no loan needing action), the page itself shows
+// an example item while the tour runs -- see TourExamples.tsx.
 //
 // Mounted once in the root layout; the current step lives in
 // sessionStorage (lib/adminTour.ts) so it survives each page change.
@@ -21,89 +22,6 @@ type Step = {
   targets?: string[]
   title: string
   text: string
-  example?: ReactNode
-}
-
-// ---- Example cards: small copies of the real ones, same styles ----
-
-function Chip({ children }: { children: ReactNode }) {
-  return (
-    <span className="text-[9px] uppercase tracking-wide font-mono rounded px-1.5 py-0.5 border text-rust border-rust/50 bg-rust/5">
-      {children}
-    </span>
-  )
-}
-
-function ExampleQueueCard() {
-  return (
-    <div className="card flex items-center gap-3 px-3 py-2.5">
-      <span className="w-7 h-7 shrink-0 rounded-full bg-sage/15 text-sage flex items-center justify-center text-sm">↑</span>
-      <div className="min-w-0 flex-1">
-        <p className="font-display font-medium text-sm truncate">Maria Santos</p>
-        <p className="text-[11px] text-ink-soft truncate">Contribution · BDO</p>
-        <span className="mt-1 flex flex-wrap gap-1">
-          <Chip>No receipt</Chip>
-          <Chip>Possible duplicate</Chip>
-        </span>
-      </div>
-      <div className="shrink-0 text-right">
-        <p className="text-sm font-mono">₱1,000.00</p>
-        <p className="text-[11px] font-mono text-gold">Review →</p>
-      </div>
-    </div>
-  )
-}
-
-function ExampleSignupCard() {
-  return (
-    <div>
-      <p className="text-xs font-semibold mb-1.5">New signups</p>
-      <div className="card flex items-center gap-3 px-3 py-2.5">
-        <div className="min-w-0 flex-1">
-          <p className="font-display font-medium text-sm truncate">Jose Reyes</p>
-          <p className="text-[11px] text-ink-soft truncate">jose@email.com · 2h ago</p>
-        </div>
-        <span className="shrink-0 text-[11px] font-mono text-gold">Review →</span>
-      </div>
-    </div>
-  )
-}
-
-function ExampleInterestCard() {
-  return (
-    <div className="card px-3 py-2.5">
-      <p className="text-[10px] uppercase tracking-wide text-ink-soft font-mono">Needs distribution</p>
-      <p className="text-sm text-ink mt-0.5">
-        <span className="font-mono font-semibold">₱2,450.18</span> interest is ready to split across members.
-      </p>
-      <div className="mt-1.5 py-1.5 flex items-center justify-between border-t border-dashed border-hairline text-sm">
-        <span className="font-medium">BDO</span>
-        <span className="font-mono font-semibold text-gold">₱1,612.40 →</span>
-      </div>
-    </div>
-  )
-}
-
-function ExampleLoanCard() {
-  return (
-    <div className="card px-3 py-2.5">
-      <p className="text-[10px] uppercase tracking-wide text-ink-soft font-mono">Needs action</p>
-      <div className="mt-1.5 py-1.5 flex items-center justify-between gap-3 border-t border-dashed border-hairline">
-        <span className="min-w-0">
-          <span className="block text-sm font-medium truncate">Ana · Tuition loan</span>
-          <span className="block text-[10px] font-mono uppercase tracking-wide text-rust">Payment 12 days overdue</span>
-        </span>
-        <span className="font-mono text-sm font-semibold shrink-0">₱8,000.00 →</span>
-      </div>
-      <div className="py-1.5 flex items-center justify-between gap-3 border-t border-dashed border-hairline">
-        <span className="min-w-0">
-          <span className="block text-sm font-medium truncate">Ben · Business loan</span>
-          <span className="block text-[10px] font-mono uppercase tracking-wide text-sage">Paid in full · close it</span>
-        </span>
-        <span className="font-mono text-sm font-semibold text-sage shrink-0">+₱600.00 →</span>
-      </div>
-    </div>
-  )
 }
 
 const STEPS: Step[] = [
@@ -122,15 +40,13 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-item", "queue-count"],
     title: "Review before approving",
-    text: "Tap an item. Match it with the bank app first. Red labels mean check twice. Rejecting? Say why.",
-    example: <ExampleQueueCard />
+    text: "Tap an item. Match it with the bank app first. Red labels mean check twice. Rejecting? Say why."
   },
   {
     path: "/admin",
     targets: ["queue-signup", "queue-count"],
     title: "New signups",
-    text: "Approve only people you know. Anyone can sign up.",
-    example: <ExampleSignupCard />
+    text: "Approve only people you know. Anyone can sign up."
   },
   {
     path: "/admin",
@@ -172,15 +88,13 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=banks",
     targets: ["bank-interest-due", "bank-total"],
     title: "Bank interest: every January",
-    text: "Last year's interest shows up here. Open the bank → Review & distribute.",
-    example: <ExampleInterestCard />
+    text: "Last year's interest shows up here. Open the bank → Review & distribute."
   },
   {
     path: "/fund-breakdown?tab=loans",
     targets: ["loans-attention", "loans-total"],
     title: "Loans",
-    text: "Overdue loans and paid-off loans to close show up here. Follow up with the borrower.",
-    example: <ExampleLoanCard />
+    text: "Overdue loans and paid-off loans to close show up here. Follow up with the borrower."
   },
   {
     path: "/admin",
@@ -193,8 +107,8 @@ const PAD = 6
 const GAP = 12
 const MARGIN = 16
 // How long to wait for a page to load its target before showing the
-// caption centred instead.
-const TARGET_TIMEOUT_MS = 6000
+// caption centred in the meantime.
+const TARGET_TIMEOUT_MS = 4000
 
 function onStepPage(step: Step) {
   const [pathname, query] = step.path.split("?")
@@ -223,15 +137,13 @@ export function AdminTourHost() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- picks up a tour already under way (sessionStorage is only readable after hydration)
     setIndex(getAdminTourStep())
-    const onStart = () => setIndex(getAdminTourStep())
-    window.addEventListener(ADMIN_TOUR_START_EVENT, onStart)
-    return () => window.removeEventListener(ADMIN_TOUR_START_EVENT, onStart)
+    const onChange = () => setIndex(getAdminTourStep())
+    window.addEventListener(ADMIN_TOUR_CHANGE_EVENT, onChange)
+    return () => window.removeEventListener(ADMIN_TOUR_CHANGE_EVENT, onChange)
   }, [])
 
-  const go = useCallback((next: number | null) => {
-    setAdminTourStep(next)
-    setIndex(next)
-  }, [])
+  // setAdminTourStep fires the change event, which updates index above.
+  const go = useCallback((next: number | null) => setAdminTourStep(next), [])
 
   if (!isAdmin || index === null || !STEPS[index]) return null
   return <TourOverlay key={index} index={index} go={go} />
@@ -277,13 +189,17 @@ function TourOverlay({ index, go }: { index: number; go: (next: number | null) =
         return
       }
       const el = findTarget(step)
-      const waitedOut = Date.now() - started > TARGET_TIMEOUT_MS
-      if (!el && step.targets && !waitedOut) return
-      window.clearInterval(timer)
-      target.current = el
-      el?.scrollIntoView({ block: "center", behavior: "smooth" })
-      measure()
-      setReady(true)
+      if (el || !step.targets) {
+        window.clearInterval(timer)
+        target.current = el
+        el?.scrollIntoView({ block: "center", behavior: "smooth" })
+        measure()
+        setReady(true)
+        return
+      }
+      // A slow page: show the caption centred meanwhile, and keep watching
+      // so the spotlight still moves onto the target once it renders.
+      if (Date.now() - started > TARGET_TIMEOUT_MS) setReady(true)
     }, 150)
     return () => window.clearInterval(timer)
   }, [step, router, measure])
@@ -354,11 +270,11 @@ function TourOverlay({ index, go }: { index: number; go: (next: number | null) =
               width: spot.width,
               height: spot.height,
               borderRadius: spot.radius,
-              boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.6)"
+              boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.45)"
             }}
           />
         ) : (
-          <div className="absolute inset-0 bg-black/60 pointer-events-none" />
+          <div className="absolute inset-0 bg-black/45 pointer-events-none" />
         )}
 
         {ready && (
@@ -373,13 +289,6 @@ function TourOverlay({ index, go }: { index: number; go: (next: number | null) =
               </span>
             </div>
             <p className="mt-1 text-sm leading-relaxed text-ink-soft">{step.text}</p>
-
-            {step.example && (
-              <div className="mt-3 rounded-xl bg-paper-2 p-2.5">
-                <p className="text-[10px] uppercase tracking-[0.14em] font-mono text-gold mb-1.5">Example</p>
-                {step.example}
-              </div>
-            )}
 
             <div className="mt-3 flex items-center gap-2">
               {isLast ? (

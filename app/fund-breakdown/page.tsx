@@ -8,6 +8,8 @@ import { SkeletonCardList, SkeletonPanel } from "@/app/components/Skeleton"
 import { useAuth } from "@/app/auth-context"
 import type { InterestType } from "@/lib/loanMath"
 import { formatInterestLabel, daysTermLabel, durationLabel, paymentOverdueLabel } from "@/lib/loanFormat"
+import { useAdminTourActive } from "@/lib/adminTour"
+import { ExampleInterestDueCard, ExampleLoansNeedsActionCard } from "@/app/components/admin/TourExamples"
 import { getPendingBankInterestGroups, isBankInterestDistributionDue } from "@/lib/bankInterest"
 import { LoanDetailPanel } from "@/app/components/breakdown/LoanDetailPanel"
 import { BankDetailPanel } from "@/app/components/breakdown/BankDetailPanel"
@@ -1509,6 +1511,8 @@ function LoansPanel({
   onLoanClosed?: () => void
 }) {
   const cachedLoans = readCache<Loan[]>(LOANS_CACHE_KEY)
+  // Same for "Needs action" -- an example card while the admin tour runs.
+  const tourActive = useAdminTourActive()
   const [loading, setLoading] = useState(!cachedLoans)
   const [loans, setLoans] = useState<Loan[]>(cachedLoans ?? [])
   const [loadError, setLoadError] = useState("")
@@ -1670,6 +1674,8 @@ function LoansPanel({
           )}
         </div>
       )}
+
+      {isAdmin && tourActive && needsAction.length === 0 && <ExampleLoansNeedsActionCard />}
 
       {needsAction.length > 0 && (
         <div data-tour="loans-attention" className="card mb-6">
@@ -1952,6 +1958,9 @@ function BanksPanel({
   onBankClosed?: () => void
 }) {
   const cachedBanks = readCache<BanksSnapshot>(BANKS_CACHE_KEY)
+  // The admin tour shows an example "Needs distribution" card when there's
+  // nothing to distribute, so its spotlight has something to land on.
+  const tourActive = useAdminTourActive()
   const [loading, setLoading] = useState(!cachedBanks)
   const [banks, setBanks] = useState<Bank[]>(cachedBanks?.banks ?? [])
   const [loadError, setLoadError] = useState("")
@@ -2129,6 +2138,8 @@ function BanksPanel({
       {showAddSheet && (
         <BankAccountSheet account={null} onClose={() => setShowAddSheet(false)} onSaved={() => load()} />
       )}
+
+      {isAdmin && tourActive && dueBanks.length === 0 && <ExampleInterestDueCard />}
 
       {isAdmin && !loadError && dueBanks.length > 0 && (
         <div data-tour="bank-interest-due" className="card mb-4">

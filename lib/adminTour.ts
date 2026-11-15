@@ -1,3 +1,7 @@
+"use client"
+
+import { useEffect, useState } from "react"
+
 // The admin tour (app/components/admin/AdminTour.tsx) opens by itself the
 // first time someone opens /admin on this device, the same per-device
 // approach as the lending limits "New" badge (see lib/lendingLimits.ts).
@@ -8,7 +12,8 @@
 // missing or blocked; then the tour simply offers itself again next visit.
 const ADMIN_TOUR_SEEN_KEY = "admin:tour-seen"
 const ADMIN_TOUR_STEP_KEY = "admin:tour-step"
-export const ADMIN_TOUR_START_EVENT = "admin-tour:start"
+// Fired whenever the tour starts, moves, or ends.
+export const ADMIN_TOUR_CHANGE_EVENT = "admin-tour:change"
 
 export const ADMIN_TOUR_REPLAY_PATH = "/admin?tour=1"
 
@@ -44,6 +49,7 @@ export function setAdminTourStep(step: number | null) {
   } catch {
     // The tour still runs on this page; it just won't survive a reload.
   }
+  window.dispatchEvent(new Event(ADMIN_TOUR_CHANGE_EVENT))
 }
 
 export function isAdminTourActive(): boolean {
@@ -55,5 +61,18 @@ export function isAdminTourActive(): boolean {
 export function startAdminTour() {
   markAdminTourSeen()
   setAdminTourStep(0)
-  window.dispatchEvent(new Event(ADMIN_TOUR_START_EVENT))
+}
+
+// Whether the tour is running, for pages that put example items in place
+// while it is (see TourExamples) -- so the spotlight has something real-
+// looking to land on when, say, nothing is waiting for approval.
+export function useAdminTourActive(): boolean {
+  const [active, setActive] = useState(false)
+  useEffect(() => {
+    const update = () => setActive(isAdminTourActive())
+    update()
+    window.addEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
+    return () => window.removeEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
+  }, [])
+  return active
 }

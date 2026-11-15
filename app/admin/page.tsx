@@ -50,7 +50,8 @@ import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
-import { hasSeenAdminTour, isAdminTourActive, startAdminTour } from "@/lib/adminTour"
+import { hasSeenAdminTour, isAdminTourActive, startAdminTour, useAdminTourActive } from "@/lib/adminTour"
+import { ExampleQueueHeading, ExampleQueueSection, ExampleSignupSection } from "@/app/components/admin/TourExamples"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -259,6 +260,9 @@ export default function AdminPage() {
   // Decided once per visit, so a later re-render can't pop it open on top
   // of something else.
   const tourDecided = useRef(false)
+  // While the tour runs, an empty queue gets example items so its
+  // spotlight has something to land on (see TourExamples).
+  const tourActive = useAdminTourActive()
   useEffect(() => {
     if (tourDecided.current || checkingAccess || member?.role !== "admin") return
     tourDecided.current = true
@@ -1011,6 +1015,8 @@ export default function AdminPage() {
   const activeFilter: Filter = chips.some((c) => c.id === filter) && showChips ? filter : "all"
 
   const showTxns = activeFilter === "all" || activeFilter === "txn"
+  const showQueueExample = tourActive && pendingTransactions.length === 0 && loansToClose.length === 0
+  const showSignupExample = tourActive && signupsCount === 0
   const showSignups = activeFilter === "all" || activeFilter === "signup"
 
   if (checkingAccess) {
@@ -1105,6 +1111,8 @@ export default function AdminPage() {
               <>
                 <span className="text-gold">{totalCount}</span> waiting on you
               </>
+            ) : tourActive ? (
+              <ExampleQueueHeading />
             ) : (
               "All caught up"
             )}
@@ -1145,7 +1153,9 @@ export default function AdminPage() {
                 chip with nothing pending already gets its own "Nothing
                 pending right now" from that chip's own fallback section
                 below, so showing this too duplicated the same message. */}
-            {activeFilter === "all" && totalCount === 0 && (
+            {showQueueExample && <ExampleQueueSection />}
+
+            {activeFilter === "all" && totalCount === 0 && !tourActive && (
               <div className="text-center py-16">
                 <p className="text-2xl mb-2">🌱</p>
                 <p className="text-sm text-ink-soft">
@@ -1487,6 +1497,7 @@ export default function AdminPage() {
               </section>
             )}
 
+            {showSignupExample && <ExampleSignupSection />}
           </div>
         </div>
 
