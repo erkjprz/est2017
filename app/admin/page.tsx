@@ -1564,7 +1564,13 @@ export default function AdminPage() {
               }}
               onConfirm={() => rejectTransaction(t.transaction_id, rejectReason)}
             />
-          ) : confirmFirstPaymentId === t.transaction_id ? (
+          ) : confirmFirstPaymentId === t.transaction_id && !isDirty && needsFirstPaymentConfirm(t.loans) ? (
+            // Only while nothing in the sheet is unsaved: the form stays
+            // editable behind this prompt, and its Approve uses the saved
+            // terms -- so an edit made here (say, setting First payment, as
+            // the prompt suggests) drops back to the normal footer, which
+            // asks for Save before Approve instead of discarding the edit.
+            // Once a saved First payment date exists, it doesn't come back.
             <>
               {actionError && <p className="text-sm text-rust mb-3">{actionError}</p>}
               <FirstPaymentConfirm
