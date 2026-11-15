@@ -414,6 +414,11 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     }
   }
 
+  // A dark page barely changes under a light dim, so dark mode dims harder
+  // for the spotlight to stand out. (The overlay only renders client-side,
+  // after the theme class is on <html>.)
+  const dim = document.documentElement.classList.contains("dark") ? "rgba(0, 0, 0, 0.72)" : "rgba(0, 0, 0, 0.45)"
+
   // The hand sits in the gap on the caption's side of the control.
   const handAbove = !!spot && viewport.h - (spot.top + spot.height) < spot.top
 
@@ -434,7 +439,10 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
               width: spot.width,
               height: spot.height,
               borderRadius: spot.radius,
-              boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.45)"
+              // Gold glow around the cut-out, then the dim over the rest
+              // of the page -- the glow is what makes it read as lit when
+              // the control itself is dark (dark mode, the + button).
+              boxShadow: `0 0 18px 4px color-mix(in srgb, var(--gold) ${via ? 85 : 60}%, transparent), 0 0 0 9999px ${dim}`
             }}
             // Tapping the highlighted control itself carries on the tour.
             onClick={via ? tap : undefined}
@@ -449,7 +457,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
             )}
           </div>
         ) : (
-          <div className="absolute inset-0 bg-black/45 pointer-events-none" />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: dim }} />
         )}
 
         {/* Pointing hand on the control to tap, in the gap between it and
@@ -471,7 +479,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
 
         {ready && (
           <div
-            className="absolute overflow-y-auto overscroll-contain bg-paper text-ink border border-hairline rounded-2xl shadow-xl p-4"
+            className="absolute overflow-y-auto overscroll-contain bg-paper text-ink border border-hairline dark:border-white/20 rounded-2xl shadow-xl p-4"
             style={cardStyle}
           >
             <div className="flex items-start justify-between gap-3">
