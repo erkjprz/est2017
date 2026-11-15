@@ -5,7 +5,7 @@ import { useEffect, useState } from "react"
 // The admin tour (app/components/admin/AdminTour.tsx) opens by itself the
 // first time someone opens /admin on this device (remembered per device,
 // in localStorage).
-// Help → Admin can replay it any time via /admin?tour=1.
+// Help → Admin can replay it any time (startAdminTour).
 //
 // The tour moves across pages, so the step it's on lives in sessionStorage
 // and its host is mounted once in the root layout. Browser storage can be
@@ -14,8 +14,6 @@ const ADMIN_TOUR_SEEN_KEY = "admin:tour-seen"
 const ADMIN_TOUR_STEP_KEY = "admin:tour-step"
 // Fired whenever the tour starts, moves, or ends.
 export const ADMIN_TOUR_CHANGE_EVENT = "admin-tour:change"
-
-export const ADMIN_TOUR_REPLAY_PATH = "/admin?tour=1"
 
 export function hasSeenAdminTour(): boolean {
   try {
