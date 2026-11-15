@@ -1622,7 +1622,7 @@ function LoansPanel({
       <p className="text-[13px] text-ink-soft mb-6">Every loan the fund has released, and what came back.</p>
 
       {!loadError && loans.length > 0 && (
-        <div className="card px-5 pt-4 pb-3.5 mb-6">
+        <div data-tour="loans-total" className="card px-5 pt-4 pb-3.5 mb-6">
           <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1.5">Total Outstanding</p>
           <p className="font-mono [font-variant-numeric:tabular-nums] text-3xl font-bold text-ink">
             ₱{fmt(totalOutstanding)}
@@ -1672,7 +1672,7 @@ function LoansPanel({
       )}
 
       {needsAction.length > 0 && (
-        <div className="card mb-6">
+        <div data-tour="loans-attention" className="card mb-6">
           <div className="px-5 pt-4 pb-2">
             <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1">Needs action</p>
             <p className="text-sm text-ink">
@@ -2131,7 +2131,7 @@ function BanksPanel({
       )}
 
       {isAdmin && !loadError && dueBanks.length > 0 && (
-        <div className="card mb-4">
+        <div data-tour="bank-interest-due" className="card mb-4">
           <div className="px-5 pt-4 pb-2">
             <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1">Needs distribution</p>
             <p className="text-sm text-ink">
@@ -2163,7 +2163,7 @@ function BanksPanel({
       )}
 
       {!loadError && banks.length > 0 && (
-        <div className="card px-5 pt-4 pb-3.5 mb-6">
+        <div data-tour="bank-total" className="card px-5 pt-4 pb-3.5 mb-6">
           <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1.5">Total Bank Balance</p>
           <p className="font-mono [font-variant-numeric:tabular-nums] text-3xl font-bold text-ink">₱{fmt(totalBalance)}</p>
           <p className="text-[11px] text-ink-soft mt-1">

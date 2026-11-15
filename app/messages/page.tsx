@@ -160,7 +160,7 @@ function MessagesInbox() {
               <div className="text-[11px] tracking-[0.18em] uppercase text-gold font-mono mb-2">
                 {isAdmin ? "Administration" : "Support"}
               </div>
-              <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-1">
+              <h1 data-tour="messages-title" className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-1">
                 {isAdmin ? "Member Questions" : "Chat with Est. 2017"}
               </h1>
               <p className="text-[13px] text-ink-soft mb-6">
@@ -210,7 +210,7 @@ function MessagesInbox() {
           )}
 
           {visible.length > 0 && (
-            <div className="card divide-y divide-hairline">
+            <div data-tour="messages-list" className="card divide-y divide-hairline">
               {visible.map((c) => {
                 const fromMe = c.last_message_sender_id === member.member_id
                 const prefix = fromMe ? "You: " : !isAdmin ? "Admins: " : ""

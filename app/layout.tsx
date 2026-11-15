@@ -8,6 +8,7 @@ import { AuthProvider } from "@/app/auth-context";
 import { ServiceWorkerRegister } from "@/app/components/ServiceWorkerRegister";
 import { EditTransactionSheetHost } from "@/app/components/EditTransactionSheetHost";
 import { PwaOnboardingSheet } from "@/app/components/PwaOnboardingSheet";
+import { AdminTourHost } from "@/app/components/admin/AdminTour";
 import { InstallGate } from "@/app/components/InstallGate";
 
 const geistSans = Geist({
@@ -96,6 +97,9 @@ export default function RootLayout({
           {/* Install + notifications onboarding -- decides for itself
               whether there's anything to offer on this device. */}
           <PwaOnboardingSheet />
+          {/* New-admin guided tour -- spans several pages, so it lives here
+              rather than on /admin, which only starts it. */}
+          <AdminTourHost />
           {/* Full-screen install prompt on the signed-out mobile entry
               points (/login, /signup) -- skippable, see InstallGate. */}
           <InstallGate />

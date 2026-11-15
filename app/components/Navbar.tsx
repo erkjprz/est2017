@@ -372,6 +372,7 @@ export default function Navbar() {
             {showFab && (
               <button
                 ref={fabRef}
+                data-tour="new-fab"
                 onClick={() => setSheetOpen(true)}
                 aria-label="New Transaction"
                 className="absolute right-4 w-14 h-14 rounded-full bg-ink text-paper flex items-center justify-center shadow-lg"

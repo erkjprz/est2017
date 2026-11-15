@@ -1,9 +1,14 @@
-// The admin tour opens by itself the first time someone opens /admin on
-// this device, the same per-device approach as the lending limits "New"
-// badge (see lib/lendingLimits.ts). Help → Admin can replay it any time
-// via /admin?tour=1. Browser storage can be missing or blocked; then the
-// tour simply offers itself again next visit.
+// The admin tour (app/components/admin/AdminTour.tsx) opens by itself the
+// first time someone opens /admin on this device, the same per-device
+// approach as the lending limits "New" badge (see lib/lendingLimits.ts).
+// Help → Admin can replay it any time via /admin?tour=1.
+//
+// The tour moves across pages, so the step it's on lives in sessionStorage
+// and its host is mounted once in the root layout. Browser storage can be
+// missing or blocked; then the tour simply offers itself again next visit.
 const ADMIN_TOUR_SEEN_KEY = "admin:tour-seen"
+const ADMIN_TOUR_STEP_KEY = "admin:tour-step"
+export const ADMIN_TOUR_START_EVENT = "admin-tour:start"
 
 export const ADMIN_TOUR_REPLAY_PATH = "/admin?tour=1"
 
@@ -15,10 +20,40 @@ export function hasSeenAdminTour(): boolean {
   }
 }
 
-export function markAdminTourSeen() {
+function markAdminTourSeen() {
   try {
     localStorage.setItem(ADMIN_TOUR_SEEN_KEY, "1")
   } catch {
     // Nothing to do -- the tour just offers itself again next time.
   }
+}
+
+export function getAdminTourStep(): number | null {
+  try {
+    const raw = sessionStorage.getItem(ADMIN_TOUR_STEP_KEY)
+    return raw === null ? null : Number(raw)
+  } catch {
+    return null
+  }
+}
+
+export function setAdminTourStep(step: number | null) {
+  try {
+    if (step === null) sessionStorage.removeItem(ADMIN_TOUR_STEP_KEY)
+    else sessionStorage.setItem(ADMIN_TOUR_STEP_KEY, String(step))
+  } catch {
+    // The tour still runs on this page; it just won't survive a reload.
+  }
+}
+
+export function isAdminTourActive(): boolean {
+  return getAdminTourStep() !== null
+}
+
+// Counts as seen as soon as it starts, so coming back to /admin mid-tour
+// (or skipping it) never starts it over.
+export function startAdminTour() {
+  markAdminTourSeen()
+  setAdminTourStep(0)
+  window.dispatchEvent(new Event(ADMIN_TOUR_START_EVENT))
 }

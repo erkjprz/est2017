@@ -50,8 +50,7 @@ import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
-import { AdminTour } from "@/app/components/admin/AdminTour"
-import { hasSeenAdminTour, markAdminTourSeen } from "@/lib/adminTour"
+import { hasSeenAdminTour, isAdminTourActive, startAdminTour } from "@/lib/adminTour"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -254,10 +253,9 @@ export default function AdminPage() {
     setLendingIsNew(!hasSeenLendingLimits())
   }, [])
 
-  // First-visit guided tour of this page (see AdminTour). Opens once per
-  // device, or again via /admin?tour=1 from Help. Its spotlight targets are
-  // the data-tour="..." attributes below.
-  const [showTour, setShowTour] = useState(false)
+  // First-visit guided tour for a new admin (see AdminTour, mounted in the
+  // root layout). Starts once per device, or again via /admin?tour=1 from
+  // Help. Its spotlight targets are the data-tour="..." attributes below.
   // Decided once per visit, so a later re-render can't pop it open on top
   // of something else.
   const tourDecided = useRef(false)
@@ -273,15 +271,9 @@ export default function AdminPage() {
     }
     // A ?signup= / ?review= link is there to open one item's review sheet
     // (see below) -- don't cover it with the tour; it'll show next visit.
-    if (!replay && (hasSeenAdminTour() || params.has("signup") || params.has("review"))) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and the URL are only readable after hydration
-    setShowTour(true)
+    if (!replay && (hasSeenAdminTour() || isAdminTourActive() || params.has("signup") || params.has("review"))) return
+    startAdminTour()
   }, [checkingAccess, member])
-
-  function closeTour() {
-    markAdminTourSeen()
-    setShowTour(false)
-  }
 
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
@@ -1435,7 +1427,7 @@ export default function AdminPage() {
 
             {/* ---- New signups ---- */}
             {showSignups && pendingMembers.length > 0 && (
-              <section>
+              <section data-tour="queue-signup">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold">New signups</span>
                   <span className="shrink-0 text-[11px] font-mono uppercase tracking-wide text-ink-soft border border-hairline rounded-full px-2.5 py-1">
@@ -2162,7 +2154,6 @@ export default function AdminPage() {
       )}
 
       {showSearchFix && <SearchFixSheet onClose={() => setShowSearchFix(false)} />}
-      {showTour && <AdminTour onClose={closeTour} />}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
       {openReceipt && (
         <ReceiptModal paths={openReceipt.paths} startIndex={openReceipt.index} onClose={() => setOpenReceipt(null)} />
