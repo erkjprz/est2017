@@ -10,7 +10,6 @@ import {
   availableToLend,
   fetchLendingPosition,
   holdPct,
-  markLendingLimitsSeen,
   saveLendingLimits,
   type LendingPosition
 } from "@/lib/lendingLimits"
@@ -74,7 +73,6 @@ export default function LendingLimitsPage() {
       router.push("/dashboard")
       return
     }
-    markLendingLimitsSeen()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once the auth check above passes
     load()
   }, [authLoading, member, router, load])
@@ -165,7 +163,7 @@ export default function LendingLimitsPage() {
               <section>
                 <p className={sectionLabelClass}>Limits</p>
                 <p className={sectionNoteClass}>Tap a number to change it, then Save.</p>
-                <div className="card divide-y divide-hairline">
+                <div data-tour="lending-limits" className="card divide-y divide-hairline">
                   {LIMIT_FIELDS.map(({ field, label, hint }) => (
                     <label key={field} className="flex items-center gap-3 px-5 py-4 cursor-text">
                       <span className="flex-1 min-w-0">

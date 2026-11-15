@@ -7,6 +7,7 @@ import Navbar from "@/app/components/Navbar"
 import BorrowerHeader from "@/app/components/BorrowerHeader"
 import { useAuth } from "@/app/auth-context"
 import { SkeletonPanel } from "@/app/components/Skeleton"
+import { ADMIN_TOUR_REPLAY_PATH } from "@/lib/adminTour"
 
 type Tab = "members" | "borrowers" | "admin"
 
@@ -904,6 +905,22 @@ export default function HelpPage() {
               </button>
             )}
           </div>
+
+          {/* Replays the walkthrough /admin shows a new admin on their first
+              visit (see AdminTour). */}
+          {activeTab === "admin" && member?.role === "admin" && !trimmedQuery && (
+            <button
+              type="button"
+              onClick={() => router.push(ADMIN_TOUR_REPLAY_PATH)}
+              className="mt-5 w-full card flex items-center gap-3 px-4 py-3 text-left"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-display font-medium text-sm">Take the admin tour</p>
+                <p className="text-xs text-ink-soft">What&apos;s expected of you, step by step.</p>
+              </div>
+              <span className="shrink-0 text-[11px] font-mono text-gold">Start →</span>
+            </button>
+          )}
 
           {trimmedQuery && filteredSections.length === 0 && (
             <p className="text-sm text-ink-soft text-center py-12">

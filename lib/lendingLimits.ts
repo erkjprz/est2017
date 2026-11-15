@@ -240,24 +240,3 @@ export function checkLoanRequest(position: LendingPosition, loanId: string, amou
     highestHold: after[0] ?? null
   }
 }
-
-// The "New" badge on the admin header's lending limits button stays until
-// this admin opens the page once on this device. Browser storage can be
-// missing or blocked; then the badge just keeps showing.
-const LENDING_SEEN_KEY = "admin:lending-limits-seen"
-
-export function hasSeenLendingLimits(): boolean {
-  try {
-    return localStorage.getItem(LENDING_SEEN_KEY) === "1"
-  } catch {
-    return false
-  }
-}
-
-export function markLendingLimitsSeen() {
-  try {
-    localStorage.setItem(LENDING_SEEN_KEY, "1")
-  } catch {
-    // Nothing to do -- the badge simply shows again next time.
-  }
-}

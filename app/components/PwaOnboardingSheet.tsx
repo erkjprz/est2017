@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import { Sheet } from "@/app/components/Sheet"
 import { useAuth } from "@/app/auth-context"
+import { hasSeenAdminTour, isAdminTourActive } from "@/lib/adminTour"
 import { isPushSupported, subscribeToPush } from "@/lib/push"
 import {
   type OnboardingStep,
@@ -86,6 +87,9 @@ export function PwaOnboardingSheet() {
     if (!eligible || step) return
 
     function evaluate() {
+      // Don't stack this on top of the admin tour, or on a new admin's
+      // first /admin visit, where the tour is about to start.
+      if (isAdminTourActive() || (pathname === "/admin" && !hasSeenAdminTour())) return
       const next = pickStep()
       if (!next) return
       setStartedAtInstall(next === "install")
@@ -100,7 +104,7 @@ export function PwaOnboardingSheet() {
       clearTimeout(timer)
       unsubscribe()
     }
-  }, [eligible, step])
+  }, [eligible, step, pathname])
 
   // A successful install (from this sheet's own button, or Chrome's own
   // omnibox/menu entry) moves straight on to notifications.

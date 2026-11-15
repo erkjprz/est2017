@@ -12,6 +12,8 @@ import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachmen
 import { TransactionPickerSheet } from "@/app/components/TransactionPickerSheet"
 import { TransactionRow, cardDate, describeTransaction, type Txn } from "@/app/components/transactions/TransactionParts"
 import { readCache, writeCache } from "@/lib/cache"
+import { useAdminTourStepId } from "@/app/components/admin/AdminTour"
+import { ExampleConversation } from "@/app/components/admin/TourExamples"
 import {
   ATTACHMENTS_MAX,
   BODY_MAX,
@@ -51,6 +53,8 @@ function MessagesInbox() {
   const searchParams = useSearchParams()
   const { loading: authLoading, member } = useAuth()
   const isAdmin = member?.role === "admin"
+  // The admin tour shows an example thread here when there are none yet.
+  const tourOnMessages = useAdminTourStepId() === "messages"
   const cacheKey = member ? `conversations:${member.member_id}` : null
   const cached = cacheKey ? readCache<ConversationSummary[]>(cacheKey) : undefined
 
@@ -160,7 +164,7 @@ function MessagesInbox() {
               <div className="text-[11px] tracking-[0.18em] uppercase text-gold font-mono mb-2">
                 {isAdmin ? "Administration" : "Support"}
               </div>
-              <h1 className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-1">
+              <h1 data-tour="messages-title" className="font-display text-3xl sm:text-4xl font-semibold text-ink mb-1">
                 {isAdmin ? "Member Questions" : "Chat with Est. 2017"}
               </h1>
               <p className="text-[13px] text-ink-soft mb-6">
@@ -199,7 +203,9 @@ function MessagesInbox() {
 
           {loadError && <p className="text-sm text-rust mb-4">Couldn&apos;t load messages: {loadError}</p>}
 
-          {!loadError && visible.length === 0 && (
+          {tourOnMessages && visible.length === 0 && <ExampleConversation />}
+
+          {!loadError && visible.length === 0 && !tourOnMessages && (
             <p className="text-sm text-ink-soft text-center py-12 card">
               {isAdmin && filter === "closed"
                 ? "No closed conversations."
@@ -210,7 +216,7 @@ function MessagesInbox() {
           )}
 
           {visible.length > 0 && (
-            <div className="card divide-y divide-hairline">
+            <div data-tour="messages-list" className="card divide-y divide-hairline">
               {visible.map((c) => {
                 const fromMe = c.last_message_sender_id === member.member_id
                 const prefix = fromMe ? "You: " : !isAdmin ? "Admins: " : ""

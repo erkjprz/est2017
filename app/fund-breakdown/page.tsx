@@ -8,6 +8,9 @@ import { SkeletonCardList, SkeletonPanel } from "@/app/components/Skeleton"
 import { useAuth } from "@/app/auth-context"
 import type { InterestType } from "@/lib/loanMath"
 import { formatInterestLabel, daysTermLabel, durationLabel, paymentOverdueLabel } from "@/lib/loanFormat"
+import { useAdminTourActive } from "@/lib/adminTour"
+import { useAdminTourStepId } from "@/app/components/admin/AdminTour"
+import { ExampleGainSplit, ExampleInterestDueCard, ExampleLoansNeedsActionCard } from "@/app/components/admin/TourExamples"
 import { getPendingBankInterestGroups, isBankInterestDistributionDue } from "@/lib/bankInterest"
 import { LoanDetailPanel } from "@/app/components/breakdown/LoanDetailPanel"
 import { BankDetailPanel } from "@/app/components/breakdown/BankDetailPanel"
@@ -122,6 +125,7 @@ function FundBreakdownHub() {
             {TABS.map((t) => (
               <button
                 key={t.id}
+                data-tour={`tab-${t.id}`}
                 onClick={() => selectTab(t.id)}
                 className={`flex-1 text-[14px] font-semibold pt-1 pb-2.5 border-b-2 -mb-px transition-colors ${
                   activeTab === t.id ? "text-ink border-gold" : "text-ink-soft border-transparent"
@@ -1509,6 +1513,10 @@ function LoansPanel({
   onLoanClosed?: () => void
 }) {
   const cachedLoans = readCache<Loan[]>(LOANS_CACHE_KEY)
+  // Same for "Needs action" -- an example card while the admin tour runs --
+  // and an example split on the step explaining how a loan's gain is shared.
+  const tourActive = useAdminTourActive()
+  const tourShowsSplit = useAdminTourStepId() === "loans-share"
   const [loading, setLoading] = useState(!cachedLoans)
   const [loans, setLoans] = useState<Loan[]>(cachedLoans ?? [])
   const [loadError, setLoadError] = useState("")
@@ -1622,7 +1630,7 @@ function LoansPanel({
       <p className="text-[13px] text-ink-soft mb-6">Every loan the fund has released, and what came back.</p>
 
       {!loadError && loans.length > 0 && (
-        <div className="card px-5 pt-4 pb-3.5 mb-6">
+        <div data-tour="loans-total" className="card px-5 pt-4 pb-3.5 mb-6">
           <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1.5">Total Outstanding</p>
           <p className="font-mono [font-variant-numeric:tabular-nums] text-3xl font-bold text-ink">
             ₱{fmt(totalOutstanding)}
@@ -1671,8 +1679,11 @@ function LoansPanel({
         </div>
       )}
 
+      {isAdmin && tourActive && needsAction.length === 0 && <ExampleLoansNeedsActionCard />}
+      {isAdmin && tourShowsSplit && <ExampleGainSplit total={600} asOf="on the day the loan closes" />}
+
       {needsAction.length > 0 && (
-        <div className="card mb-6">
+        <div data-tour="loans-attention" className="card mb-6">
           <div className="px-5 pt-4 pb-2">
             <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1">Needs action</p>
             <p className="text-sm text-ink">
@@ -1952,6 +1963,11 @@ function BanksPanel({
   onBankClosed?: () => void
 }) {
   const cachedBanks = readCache<BanksSnapshot>(BANKS_CACHE_KEY)
+  // The admin tour shows an example "Needs distribution" card when there's
+  // nothing to distribute, so its spotlight has something to land on, and
+  // an example split on the step explaining how interest is shared.
+  const tourActive = useAdminTourActive()
+  const tourShowsSplit = useAdminTourStepId() === "interest-share"
   const [loading, setLoading] = useState(!cachedBanks)
   const [banks, setBanks] = useState<Bank[]>(cachedBanks?.banks ?? [])
   const [loadError, setLoadError] = useState("")
@@ -2130,8 +2146,11 @@ function BanksPanel({
         <BankAccountSheet account={null} onClose={() => setShowAddSheet(false)} onSaved={() => load()} />
       )}
 
+      {isAdmin && tourActive && dueBanks.length === 0 && <ExampleInterestDueCard />}
+      {isAdmin && tourShowsSplit && <ExampleGainSplit total={2450.18} asOf="on Dec 31" />}
+
       {isAdmin && !loadError && dueBanks.length > 0 && (
-        <div className="card mb-4">
+        <div data-tour="bank-interest-due" className="card mb-4">
           <div className="px-5 pt-4 pb-2">
             <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1">Needs distribution</p>
             <p className="text-sm text-ink">
@@ -2163,7 +2182,7 @@ function BanksPanel({
       )}
 
       {!loadError && banks.length > 0 && (
-        <div className="card px-5 pt-4 pb-3.5 mb-6">
+        <div data-tour="bank-total" className="card px-5 pt-4 pb-3.5 mb-6">
           <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1.5">Total Bank Balance</p>
           <p className="font-mono [font-variant-numeric:tabular-nums] text-3xl font-bold text-ink">₱{fmt(totalBalance)}</p>
           <p className="text-[11px] text-ink-soft mt-1">
@@ -2295,6 +2314,9 @@ function InvestmentsPanel({
   onInvestmentClosed?: () => void
 }) {
   const cachedInvestments = readCache<Investment[]>(INVESTMENTS_CACHE_KEY)
+  // The admin tour's step on how an investment's gain or loss is shared
+  // shows an example split here.
+  const tourShowsSplit = useAdminTourStepId() === "investments-share"
   const [loading, setLoading] = useState(!cachedInvestments)
   const [investments, setInvestments] = useState<Investment[]>(cachedInvestments ?? [])
   const [loadError, setLoadError] = useState("")
@@ -2440,6 +2462,8 @@ function InvestmentsPanel({
       {showAddSheet && (
         <InvestmentDetailsSheet investment={null} onClose={() => setShowAddSheet(false)} onSaved={load} />
       )}
+
+      {isAdmin && tourShowsSplit && <ExampleGainSplit total={3600} asOf="on the date you distribute" />}
 
       {!loadError && needsDistribution.length > 0 && (
         <div className="card mb-4">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import Navbar from "@/app/components/Navbar"
@@ -48,8 +48,17 @@ import { MessagesButton } from "@/app/components/admin/MessagesButton"
 import { FirstPaymentConfirm, needsFirstPaymentConfirm } from "@/app/components/admin/FirstPaymentConfirm"
 import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
-import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
+import { checkLoanRequest, fetchLendingPosition, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
+import { hasSeenAdminTour, isAdminTourActive, startAdminTour } from "@/lib/adminTour"
+import { useAdminTourStep } from "@/app/components/admin/AdminTour"
+import {
+  EXAMPLE_TXN_PREFIX,
+  ExampleQueueHeading,
+  ExampleQueueSection,
+  ExampleSignupSection,
+  exampleReviewTxn
+} from "@/app/components/admin/TourExamples"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -243,14 +252,34 @@ export default function AdminPage() {
   const [loansToClose, setLoansToClose] = useState<LoanToClose[]>([])
   // Only fetched while a Loan Release is waiting -- see loadQueueContext.
   const [lendingPosition, setLendingPosition] = useState<LendingPosition | null>(null)
-  // "New" badge on the lending limits button until this admin has opened
-  // the page once. Read after mount -- browser storage isn't there on the
-  // server render.
-  const [lendingIsNew, setLendingIsNew] = useState(false)
+
+  // First-visit guided tour for a new admin (see AdminTour, mounted in the
+  // root layout). Starts once per device, or again via /admin?tour=1 from
+  // Help. Its spotlight targets are the data-tour="..." attributes below.
+  // Decided once per visit, so a later re-render can't pop it open on top
+  // of something else.
+  const tourDecided = useRef(false)
+  // While the tour is on the steps about reviewing (not its first look,
+  // which shows the real, usually empty, queue, nor its last), an empty
+  // queue gets example items so the spotlight has something to land on
+  // (see TourExamples).
+  const { id: tourStepId, showing: tourStepShowing } = useAdminTourStep()
+  const tourExamples = tourStepId !== null && ["review-", "form-", "signup", "fix", "export"].some((p) => tourStepId.startsWith(p))
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after hydration
-    setLendingIsNew(!hasSeenLendingLimits())
-  }, [])
+    if (tourDecided.current || checkingAccess || member?.role !== "admin") return
+    tourDecided.current = true
+    const params = new URLSearchParams(window.location.search)
+    const replay = params.get("tour") === "1"
+    if (replay) {
+      params.delete("tour")
+      const qs = params.toString()
+      window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`)
+    }
+    // A ?signup= / ?review= link is there to open one item's review sheet
+    // (see below) -- don't cover it with the tour; it'll show next visit.
+    if (!replay && (hasSeenAdminTour() || isAdminTourActive() || params.has("signup") || params.has("review"))) return
+    startAdminTour()
+  }, [checkingAccess, member])
 
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
@@ -437,7 +466,10 @@ export default function AdminPage() {
   // One extra line of context under the card's type line. A Loan Release's
   // lending numbers get their own Fund check card in the review sheet
   // instead (see FundCheckCard); its card keeps just the warning chips.
-  function contextFor(t: QueueTxn): string | null {
+  function contextFor(t: QueueTxn & { example_context?: string | null }): string | null {
+    // The admin tour's example forms carry this line themselves -- there's
+    // no real loan or balance behind them to work it out from.
+    if (t.example_context) return t.example_context
     if (t.classification === "Member Withdrawal" && t.member_id && memberWithdrawable[t.member_id]) {
       const w = memberWithdrawable[t.member_id]
       const available = Math.max(0, w.withdrawableNow - (w.pendingOut - Math.abs(Number(t.amount))))
@@ -648,6 +680,7 @@ export default function AdminPage() {
   }
 
   async function rejectTransaction(transactionId: string, reason: string) {
+    if (transactionId.startsWith(EXAMPLE_TXN_PREFIX)) return
     const txn = pendingTransactions.find((t) => t.transaction_id === transactionId)
     const isLoanRelease = txn?.classification === "Loan Release" && txn.loan_id
 
@@ -726,6 +759,7 @@ export default function AdminPage() {
   // own "Approve" button below -- a lone pending item skips ticking a
   // checkbox entirely and calls this directly with just its own id.
   async function approveBulkIds(ids: string[]) {
+    ids = ids.filter((id) => !id.startsWith(EXAMPLE_TXN_PREFIX))
     if (ids.length === 0) return
     setBulkApproving(true)
     setActionError("")
@@ -776,6 +810,7 @@ export default function AdminPage() {
   // and loans.principal (positive) -- both need to move together.
   async function saveTransactionEdit(t: any) {
     const id = t.transaction_id
+    if (id.startsWith(EXAMPLE_TXN_PREFIX)) return
     const amountStr = editAmounts[id]
     const newAmount = amountStr !== undefined && amountStr !== "" ? Number(amountStr) : Math.abs(Number(t.amount))
     if (!Number.isFinite(newAmount) || newAmount <= 0) return
@@ -951,7 +986,20 @@ export default function AdminPage() {
   const reviewTransactions = pendingTransactions.filter((t) => !BULK_CLASSIFICATIONS.has(t.classification))
   // Any pending row opens the review sheet -- Confirmed money rows too, so
   // every item can be checked (date, notes, receipt, bank effect) the same way.
-  const reviewingTxn = pendingTransactions.find((t) => t.transaction_id === reviewingTxnId) ?? null
+  // On its form-* steps the admin tour opens this same review sheet for a
+  // made-up transaction of that type (see TourExamples) -- inert, since the
+  // actions below refuse example ids.
+  const tourFormTxn = tourStepShowing ? exampleReviewTxn(tourStepId, banks) : null
+  // The example loan release gets the real fund check against today's
+  // lending limits, same as a real request (read-only).
+  const tourNeedsLending = tourFormTxn?.classification === "Loan Release"
+  useEffect(() => {
+    if (!tourNeedsLending || lendingPosition) return
+    fetchLendingPosition()
+      .then(setLendingPosition)
+      .catch(() => {})
+  }, [tourNeedsLending, lendingPosition])
+  const reviewingTxn = tourFormTxn ?? pendingTransactions.find((t) => t.transaction_id === reviewingTxnId) ?? null
   // Confirmed money rows have no sheet of their own to nest a reject prompt
   // inside (they're plain rows in the page, not opened via a sheet the way
   // everything else here is) -- rejectingId doubles as which row's own
@@ -988,6 +1036,8 @@ export default function AdminPage() {
   const activeFilter: Filter = chips.some((c) => c.id === filter) && showChips ? filter : "all"
 
   const showTxns = activeFilter === "all" || activeFilter === "txn"
+  const showQueueExample = tourExamples && pendingTransactions.length === 0 && loansToClose.length === 0
+  const showSignupExample = tourExamples && signupsCount === 0
   const showSignups = activeFilter === "all" || activeFilter === "signup"
 
   if (checkingAccess) {
@@ -1018,6 +1068,7 @@ export default function AdminPage() {
                 here, whatever's in the queue below. */}
             <button
               onClick={() => router.push("/admin/members")}
+              data-tour="members"
               className="shrink-0 inline-flex items-center justify-center w-9 h-9 text-ink-soft border border-hairline rounded-full hover:bg-paper-2 hover:text-ink transition-colors"
               title="Members and borrowers"
               aria-label="Members and borrowers"
@@ -1033,24 +1084,20 @@ export default function AdminPage() {
                 are checked against. */}
             <button
               onClick={() => router.push("/admin/lending")}
-              className={`relative shrink-0 inline-flex items-center justify-center w-9 h-9 border rounded-full hover:bg-paper-2 hover:text-ink transition-colors ${
-                lendingIsNew ? "text-gold border-gold/60" : "text-ink-soft border-hairline"
-              }`}
+              className="shrink-0 inline-flex items-center justify-center w-9 h-9 text-ink-soft border border-hairline rounded-full hover:bg-paper-2 hover:text-ink transition-colors"
+              data-tour="lending"
               title="Lending limits"
-              aria-label={lendingIsNew ? "Lending limits (new)" : "Lending limits"}
+              aria-label="Lending limits"
             >
-              {lendingIsNew && (
-                <span className="absolute -top-1.5 -right-2 bg-gold-soft text-ink text-[8px] font-mono font-bold uppercase tracking-wide leading-none rounded-full px-1.5 py-[3px] shadow-sm">
-                  New
-                </span>
-              )}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                 <path d="M4 20h16" />
                 <path d="M6 16V11M10 16V7M14 16v-5M18 16V4" />
               </svg>
             </button>
 
-            <MessagesButton />
+            <span data-tour="messages" className="inline-flex rounded-full">
+              <MessagesButton />
+            </span>
 
             {/* Page-level action, not scoped to any group -- always exports
                 the full transaction history regardless of what's filtered
@@ -1058,6 +1105,7 @@ export default function AdminPage() {
             <button
               onClick={exportTransactionsCsv}
               disabled={exporting}
+              data-tour="export"
               className="shrink-0 inline-flex items-center justify-center w-9 h-9 text-ink-soft border border-hairline rounded-full hover:bg-paper-2 hover:text-ink transition-colors disabled:opacity-60"
               title="Export full transaction history (every status, not just what's shown below) as a CSV backup"
               aria-label="Export CSV"
@@ -1072,11 +1120,13 @@ export default function AdminPage() {
             </button>
             </div>
           </div>
-          <h1 className="font-display text-3xl font-semibold">
+          <h1 data-tour="queue-count" className="font-display text-3xl font-semibold">
             {totalCount > 0 ? (
               <>
                 <span className="text-gold">{totalCount}</span> waiting on you
               </>
+            ) : showQueueExample ? (
+              <ExampleQueueHeading />
             ) : (
               "All caught up"
             )}
@@ -1117,7 +1167,9 @@ export default function AdminPage() {
                 chip with nothing pending already gets its own "Nothing
                 pending right now" from that chip's own fallback section
                 below, so showing this too duplicated the same message. */}
-            {activeFilter === "all" && totalCount === 0 && (
+            {showQueueExample && <ExampleQueueSection />}
+
+            {activeFilter === "all" && totalCount === 0 && !showQueueExample && !showSignupExample && (
               <div className="text-center py-16">
                 <p className="text-2xl mb-2">🌱</p>
                 <p className="text-sm text-ink-soft">
@@ -1128,7 +1180,7 @@ export default function AdminPage() {
 
             {/* ---- Confirmed money (bulk) ---- */}
             {showTxns && bulkTransactions.length > 0 && (
-              <section>
+              <section data-tour="queue-confirmed">
                 <div className="flex items-center justify-between gap-3">
                   <label
                     className={`flex items-center gap-2.5 text-sm font-semibold ${
@@ -1160,7 +1212,7 @@ export default function AdminPage() {
 
                 <div className="mt-3 space-y-2">
                   {bulkTransactions.map((t) => (
-                    <div key={t.transaction_id} className="card overflow-hidden">
+                    <div key={t.transaction_id} data-tour="queue-item" className="card overflow-hidden">
                       <div className="flex items-center gap-3 px-4 py-3">
                         {bulkTransactions.length > 1 && (
                           <input
@@ -1303,7 +1355,7 @@ export default function AdminPage() {
 
             {/* ---- Needs a decision ---- */}
             {showTxns && reviewTransactions.length > 0 && (
-              <section>
+              <section data-tour="queue-decision">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold">Needs a decision</span>
                   <span className="shrink-0 text-[11px] font-mono uppercase tracking-wide text-gold border border-gold rounded-full px-2.5 py-1">
@@ -1324,6 +1376,7 @@ export default function AdminPage() {
                         key={t.transaction_id}
                         type="button"
                         onClick={() => setReviewingTxnId(t.transaction_id)}
+                        data-tour="queue-item"
                         className="w-full card overflow-hidden flex items-center gap-3 px-4 py-3 text-left"
                       >
                         <FlowBadge {...(FLOW[t.classification] ?? { arrow: "•", tone: "out" })} small />
@@ -1398,7 +1451,7 @@ export default function AdminPage() {
 
             {/* ---- New signups ---- */}
             {showSignups && pendingMembers.length > 0 && (
-              <section>
+              <section data-tour="queue-signup">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold">New signups</span>
                   <span className="shrink-0 text-[11px] font-mono uppercase tracking-wide text-ink-soft border border-hairline rounded-full px-2.5 py-1">
@@ -1458,6 +1511,7 @@ export default function AdminPage() {
               </section>
             )}
 
+            {showSignupExample && <ExampleSignupSection />}
           </div>
         </div>
 
@@ -1479,6 +1533,7 @@ export default function AdminPage() {
             <button
               onClick={() => setShowSearchFix(true)}
               aria-label="Search & Fix"
+              data-tour="search-fix"
               className="pointer-events-auto w-14 h-14 rounded-full bg-ink text-paper flex items-center justify-center shadow-lg"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
@@ -1642,7 +1697,7 @@ export default function AdminPage() {
 
         return (
           <Sheet
-            title="Review transaction"
+            title={tourFormTxn ? "Review transaction · Example" : "Review transaction"}
             onClose={() => {
               setReviewingTxnId(null)
               setApproveTriedId(null)
@@ -1653,6 +1708,8 @@ export default function AdminPage() {
             }}
             footer={footer}
           >
+            {/* data-tour: what the admin tour's form-* steps point at. */}
+            <div data-tour="review-form">
             <div className="card overflow-hidden">
               <FieldRow icon={<FlowBadge {...(FLOW[t.classification] ?? { arrow: "•", tone: "out" })} small />}>
                 <span className="flex-1 min-w-0 text-sm">
@@ -1696,7 +1753,7 @@ export default function AdminPage() {
               const termValue = editTermMonths[id] ?? String(t.loans?.term_months ?? "")
               const paymentsStartValue = editPaymentsStart[id] ?? (t.loans?.payments_start_date ?? "")
               return (
-                <div className="-mt-2 mb-4">
+                <div data-tour="review-terms" className="-mt-2 mb-4">
                   <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Loan terms</p>
                   <div className="card divide-y divide-hairline overflow-hidden">
                     <FieldRow icon={<InterestIcon />}>
@@ -1854,7 +1911,7 @@ export default function AdminPage() {
             )}
 
             {needsAdminProof && (
-            <div>
+            <div data-tour="review-details">
               <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Details</p>
               <div className="card divide-y divide-hairline overflow-hidden">
                 {needsWithdrawalBank && (
@@ -1984,6 +2041,7 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+            </div>
           </Sheet>
         )
       })()}

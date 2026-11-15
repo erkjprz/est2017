@@ -4,6 +4,9 @@ import { supabase } from "@/lib/supabase"
 // path (not a durable URL) and resolve a short-lived signed URL right
 // before displaying it.
 export async function getReceiptSignedUrl(path: string): Promise<string | null> {
+  // The admin tour's example forms use bundled images (public/tour/), not
+  // stored receipts -- served as they are.
+  if (path.startsWith("/tour/")) return path
   const { data, error } = await supabase.storage.from("Receipts").createSignedUrl(path, 3600)
   if (error) return null
   return data.signedUrl

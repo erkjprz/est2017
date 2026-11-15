@@ -273,6 +273,7 @@ export default function AdminMembersPage() {
               <h1 className="font-display text-4xl font-semibold">Members</h1>
             </div>
             <button
+              data-tour="members-add"
               className="shrink-0 bg-gold-soft text-ink px-4 py-2.5 rounded-full text-sm font-semibold"
               onClick={() => {
                 setError("")
