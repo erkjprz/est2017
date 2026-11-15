@@ -258,6 +258,21 @@ const MIN_CARD_ROOM = 200
 const GAP = 12
 const HAND_GAP = 52
 const MARGIN = 16
+
+// The phone's safe-area insets (status bar, home indicator). The installed
+// app draws under the iOS status bar, so a caption at the very top of the
+// screen would sit behind the clock. env() is CSS-only, so read it off a
+// probe element.
+function safeInsets() {
+  const probe = document.createElement("div")
+  probe.style.cssText =
+    "position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)"
+  document.body.appendChild(probe)
+  const style = getComputedStyle(probe)
+  const insets = { top: parseFloat(style.paddingTop) || 0, bottom: parseFloat(style.paddingBottom) || 0 }
+  probe.remove()
+  return insets
+}
 // How long to wait for a page to load its target before showing the
 // caption centred in the meantime (the spotlight still moves onto it later).
 const TARGET_TIMEOUT_MS = 4000
@@ -353,7 +368,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const isLast = index === STEPS.length - 1
   const [ready, setReady] = useState(false)
   const [spot, setSpot] = useState<Spot | null>(null)
-  const [viewport, setViewport] = useState({ w: 0, h: 0 })
+  // The screen, and the edges a caption must stay inside of.
+  const [viewport, setViewport] = useState({ w: 0, h: 0, top: MARGIN, bottom: MARGIN })
   const target = useRef<HTMLElement | null>(null)
   // While the tour is asking for a tap: its caption, how to resume once
   // tapped, and whether the press animation is playing.
@@ -363,9 +379,19 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const tap = useCallback(() => tapped.current?.(), [])
   // The caption's topic list, open in place of the step text.
   const [showTopics, setShowTopics] = useState(false)
+  // The caption's natural height (text plus buttons), measured after each
+  // render, so it's only placed beside the spotlight where it fully fits.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const footRef = useRef<HTMLDivElement>(null)
+  const [need, setNeed] = useState(MIN_CARD_ROOM)
+  useLayoutEffect(() => {
+    const natural = (bodyRef.current?.scrollHeight ?? 0) + (footRef.current?.offsetHeight ?? 0)
+    if (natural > 0 && Math.abs(natural - need) > 1) setNeed(natural)
+  }, [need, ready, via, showTopics, viewport.w])
 
   const measure = useCallback(() => {
-    setViewport({ w: window.innerWidth, h: window.innerHeight })
+    const insets = safeInsets()
+    setViewport({ w: window.innerWidth, h: window.innerHeight, top: insets.top + MARGIN, bottom: insets.bottom + MARGIN })
     const el = target.current
     if (!el || !el.isConnected) {
       setSpot(null)
@@ -507,24 +533,29 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   if (spot && viewport.w) {
     const centre = spot.left + spot.width / 2
     const left = Math.min(Math.max(centre - cardWidth / 2, MARGIN), viewport.w - cardWidth - MARGIN)
-    const roomBelow = viewport.h - (spot.top + spot.height) - gap - MARGIN
-    const roomAbove = spot.top - gap - MARGIN
-    if (Math.max(roomBelow, roomAbove) >= MIN_CARD_ROOM) {
+    const roomBelow = viewport.h - (spot.top + spot.height) - gap - viewport.bottom
+    const roomAbove = spot.top - gap - viewport.top
+    const fitsBelow = roomBelow >= need
+    const fitsAbove = roomAbove >= need
+    if (fitsBelow || fitsAbove) {
       cardStyle =
-        roomBelow >= roomAbove
+        fitsBelow && (roomBelow >= roomAbove || !fitsAbove)
           ? { left, top: spot.top + spot.height + gap, width: cardWidth, maxHeight: roomBelow }
           : { left, bottom: viewport.h - spot.top + gap, width: cardWidth, maxHeight: roomAbove }
     } else {
-      // Too tall to caption beside: pin the caption to a screen edge. In a
+      // No room for the whole caption beside it: pin it to a screen edge. In a
       // sheet (the review forms) that's the top -- over the form's title --
       // so its Approve button and bank line stay in view; on a page (the
       // queue examples) whichever edge is further from the spotlight.
+      // Tall enough for a step's text plus its notification note without
+      // scrolling, while leaving the far end of the screen (a form's
+      // Approve button) in view.
       const pinTop = spot.inSheet || spot.top + spot.height / 2 > viewport.h / 2
       cardStyle = {
         left: (viewport.w - cardWidth) / 2,
-        ...(pinTop ? { top: MARGIN + 8 } : { bottom: MARGIN + 8 }),
+        ...(pinTop ? { top: viewport.top } : { bottom: viewport.bottom }),
         width: cardWidth,
-        maxHeight: viewport.h / 2
+        maxHeight: Math.min(viewport.h - viewport.top - viewport.bottom, Math.max(viewport.h * 0.62, 380))
       }
     }
   } else {
@@ -533,7 +564,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       top: "50%",
       transform: "translate(-50%, -50%)",
       width: cardWidth || 340,
-      maxHeight: viewport.h ? viewport.h - MARGIN * 2 : undefined
+      maxHeight: viewport.h ? viewport.h - viewport.top - viewport.bottom : undefined
     }
   }
 
@@ -601,112 +632,105 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         )}
 
         {ready && (
+          // Text scrolls in its own area if it ever has to; the buttons sit
+          // in a fixed row underneath, so they're always in view.
           <div
-            className="absolute overflow-y-auto overscroll-contain bg-paper text-ink border border-hairline dark:border-white/20 rounded-2xl shadow-xl p-4"
+            className="absolute flex flex-col overflow-hidden bg-paper text-ink border border-hairline dark:border-white/20 rounded-2xl shadow-xl"
             style={cardStyle}
           >
-            <div className="flex items-start justify-between gap-3">
-              <p className="font-display font-semibold text-base leading-snug">
-                {showTopics ? "Go to a topic" : via ? via.title : step.title}
-              </p>
-              <span className="shrink-0 flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] font-mono text-ink-soft">
-                  {index + 1}/{STEPS.length}
+            <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-1">
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-display font-semibold text-base leading-snug">
+                  {showTopics ? "Go to a topic" : via ? via.title : step.title}
+                </p>
+                <span className="shrink-0 flex items-center gap-2 mt-0.5">
+                  <span className="text-[11px] font-mono text-ink-soft">
+                    {index + 1}/{STEPS.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowTopics((v) => !v)}
+                    aria-expanded={showTopics}
+                    className="text-[11px] font-mono text-gold border border-gold/60 rounded-full px-2 py-0.5"
+                  >
+                    {showTopics ? "Close" : "Topics ▾"}
+                  </button>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowTopics((v) => !v)}
-                  aria-expanded={showTopics}
-                  className="text-[11px] font-mono text-gold border border-gold/60 rounded-full px-2 py-0.5"
-                >
-                  {showTopics ? "Close" : "Topics ▾"}
-                </button>
-              </span>
-            </div>
-
-            {showTopics ? (
-              <ul className="mt-2 -mx-1">
-                {TOPICS.map((t) => {
-                  const current = topicOf(index) === t.name
-                  return (
-                    <li key={t.name}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowTopics(false)
-                          if (t.index !== index) go(t.index)
-                        }}
-                        className={`w-full flex items-center justify-between gap-3 px-2 py-2 rounded-lg text-left text-sm ${
-                          current ? "bg-gold/15 text-ink font-semibold" : "text-ink hover:bg-paper-2"
-                        }`}
-                      >
-                        <span>{t.name}</span>
-                        <span className="text-ink-soft">{current ? "You're here" : "→"}</span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : (
-            <>
-            <p className="mt-1 text-sm leading-relaxed text-ink-soft">{via ? via.hint : step.text}</p>
-
-            {!via && step.notify && (
-              <p className="mt-2.5 flex gap-2 rounded-lg bg-gold/10 px-2.5 py-2 text-[13px] leading-snug text-ink">
-                <span aria-hidden="true">🔔</span>
-                <span>{step.notify}</span>
-              </p>
-            )}
-
-            {via ? (
-              <div className="sticky -bottom-4 -mx-4 -mb-4 mt-3 flex items-center gap-2 bg-paper px-4 pb-4 pt-2">
-                <button type="button" onClick={() => go(null)} className="text-xs text-ink-soft px-1 py-2 mr-auto">
-                  Skip tour
-                </button>
-                <button
-                  type="button"
-                  onClick={() => go(index - 1)}
-                  className="border border-hairline text-ink-soft px-4 py-2 rounded-full text-sm font-semibold"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={tap}
-                  disabled={tapping}
-                  className="bg-gold text-paper px-5 py-2 rounded-full text-sm font-bold"
-                >
-                  Tap it
-                </button>
               </div>
-            ) : (
-            <div className="sticky -bottom-4 -mx-4 -mb-4 mt-3 flex items-center gap-2 bg-paper px-4 pb-4 pt-2">
-              {isLast ? (
-                <span className="mr-auto" />
+
+              {showTopics ? (
+                <ul className="mt-2 mb-3 -mx-1">
+                  {TOPICS.map((t) => {
+                    const current = topicOf(index) === t.name
+                    return (
+                      <li key={t.name}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowTopics(false)
+                            if (t.index !== index) go(t.index)
+                          }}
+                          className={`w-full flex items-center justify-between gap-3 px-2 py-2 rounded-lg text-left text-sm ${
+                            current ? "bg-gold/15 text-ink font-semibold" : "text-ink hover:bg-paper-2"
+                          }`}
+                        >
+                          <span>{t.name}</span>
+                          <span className="text-ink-soft">{current ? "You're here" : "→"}</span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
               ) : (
-                <button type="button" onClick={() => go(null)} className="text-xs text-ink-soft px-1 py-2 mr-auto">
-                  Skip tour
-                </button>
+                <>
+                  <p className="mt-1 text-sm leading-relaxed text-ink-soft">{via ? via.hint : step.text}</p>
+                  {!via && step.notify && (
+                    <p className="mt-2.5 flex gap-2 rounded-lg bg-gold/10 px-2.5 py-2 text-[13px] leading-snug text-ink">
+                      <span aria-hidden="true">🔔</span>
+                      <span>{step.notify}</span>
+                    </p>
+                  )}
+                </>
               )}
-              {index > 0 && (
-                <button
-                  type="button"
-                  onClick={() => go(index - 1)}
-                  className="border border-hairline text-ink-soft px-4 py-2 rounded-full text-sm font-semibold"
-                >
-                  Back
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => go(isLast ? null : index + 1)}
-                className="bg-ink text-paper px-5 py-2 rounded-full text-sm font-bold"
-              >
-                {isLast ? "Done" : index === 0 ? "Start" : "Next"}
-              </button>
             </div>
-            )}
-            </>
+
+            {!showTopics && (
+              <div ref={footRef} className="shrink-0 flex items-center gap-2 px-4 pb-4 pt-3">
+                {isLast && !via ? (
+                  <span className="mr-auto" />
+                ) : (
+                  <button type="button" onClick={() => go(null)} className="text-xs text-ink-soft px-1 py-2 mr-auto">
+                    Skip tour
+                  </button>
+                )}
+                {index > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => go(index - 1)}
+                    className="border border-hairline text-ink-soft px-4 py-2 rounded-full text-sm font-semibold"
+                  >
+                    Back
+                  </button>
+                )}
+                {via ? (
+                  <button
+                    type="button"
+                    onClick={tap}
+                    disabled={tapping}
+                    className="bg-gold text-paper px-5 py-2 rounded-full text-sm font-bold"
+                  >
+                    Tap it
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => go(isLast ? null : index + 1)}
+                    className="bg-ink text-paper px-5 py-2 rounded-full text-sm font-bold"
+                  >
+                    {isLast ? "Done" : index === 0 ? "Start" : "Next"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
