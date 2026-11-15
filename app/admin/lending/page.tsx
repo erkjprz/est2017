@@ -136,8 +136,8 @@ export default function LendingLimitsPage() {
 
           {position && limits && (
             <div className="space-y-7">
-              {/* ---- Where the fund stands ---- */}
-              <section>
+              {/* ---- Where the fund stands ---- (data-tour: the admin tour) */}
+              <section data-tour="lending-available">
                 <div className="card p-5">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-[13px] text-ink-soft">Available to lend</span>
@@ -212,8 +212,8 @@ export default function LendingLimitsPage() {
                 </div>
               </section>
 
-              {/* ---- Borrowers ---- */}
-              <section>
+              {/* ---- Borrowers ---- (data-tour: the admin tour) */}
+              <section data-tour="lending-borrowers">
                 <p className={sectionLabelClass}>Borrowers</p>
                 <p className={sectionNoteClass}>
                   Unpaid principal plus any pending request, as a share of the fund. Limit {pct(limits.max_per_borrower_pct)}.

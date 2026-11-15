@@ -160,13 +160,27 @@ const STEPS: Step[] = [
     topic: "Members"
   },
   {
+    id: "lending-available",
+    path: "/admin/lending",
+    targets: ["lending-available"],
+    via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "The bar-chart icon, next to Members." }],
+    title: "Available to lend",
+    text: "How much more can go out on loan: the Total loans limit's share of the fund, minus what's already out. The bar fills as loans go out.",
+    topic: "Lending limits"
+  },
+  {
     id: "lending",
     path: "/admin/lending",
     targets: ["lending-limits"],
-    via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "The bar-chart icon, next to Members." }],
     title: "When a loan is requested",
-    text: "Each request is checked against these limits. Going over shows a warning on the request but doesn't block it. Change the limits only when everyone agrees.",
-    topic: "Lending limits"
+    text: "Each request is checked against these limits. Going over shows a warning on the request but doesn't block it. Change the limits only when everyone agrees."
+  },
+  {
+    id: "lending-borrowers",
+    path: "/admin/lending",
+    targets: ["lending-borrowers"],
+    title: "Borrowers",
+    text: "Each borrower's unpaid loans plus any pending request, as a share of the fund. A share in red is over the Per borrower limit."
   },
   {
     id: "lending-holds",
