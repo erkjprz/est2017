@@ -569,6 +569,11 @@ export function LoanDetailPanel({
           {loan.repayment_frequency === "monthly" && loan.due_day != null && (
             <InfoRow label="Due date" value={`${ordinalDay(loan.due_day)} of each month`} />
           )}
+          {/* Only when payments start later than the release -- otherwise
+              the first one simply follows the due day above. */}
+          {loan.repayment_frequency === "monthly" && loan.payments_start_date && (
+            <InfoRow label="First payment" value={longDate(loan.payments_start_date)} />
+          )}
           {lumpSumDue && <InfoRow label="Due date" value={longDate(lumpSumDue)} />}
           {loan.notes && <InfoRow label="Notes" value={loan.notes} />}
         </InfoBox>
