@@ -237,7 +237,10 @@ export function ExampleConversation() {
 // it opens; their ids start with EXAMPLE_TXN_PREFIX, which the page's
 // approve/reject/save actions refuse, and the tour's overlay blocks taps on
 // the form anyway. The bank is a real one, so the "bank balance after"
-// preview above Approve reads true.
+// preview above Approve reads true. Each carries what the real form would
+// work out from the member's loan or balance (`example_context`, e.g.
+// "left on loan"), a receipt image from public/tour/ where a member would
+// attach one, and a loan id so a loan release gets the real fund check.
 
 export const EXAMPLE_TXN_PREFIX = "example-"
 
@@ -255,7 +258,8 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
     txn_date: today,
     created_at: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
     description: null,
-    receipt_urls: [],
+    receipt_urls: [] as string[],
+    example_context: null as string | null,
     submitted_by_member: null,
     bank_accounts: null,
     bank_account_id: null,
@@ -275,7 +279,7 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
         classification: "Member Contribution",
         amount: 1000,
         members: { name: "Maria Santos", email: "maria@email.com" },
-        description: "November contribution"
+        receipt_urls: ["/tour/example-receipt-contribution.png"]
       }
     case "form-loan-payment":
       return {
@@ -284,8 +288,10 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
         transaction_id: `${EXAMPLE_TXN_PREFIX}loan-payment`,
         classification: "Loan Repayment",
         amount: 2150,
+        loan_id: `${EXAMPLE_TXN_PREFIX}loan-ana`,
         members: { name: "Ana Cruz", email: "ana@email.com" },
-        description: "Tuition loan, payment 3 of 6"
+        receipt_urls: ["/tour/example-receipt-loan-payment.png"],
+        example_context: "₱6,450.00 left on loan"
       }
     case "form-withdrawal":
       return {
@@ -294,6 +300,7 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
         classification: "Member Withdrawal",
         amount: -5000,
         members: { name: "Jose Reyes", email: "jose@email.com" },
+        example_context: "₱12,400.00 available to withdraw",
         payout_details: "GCash · Jose Reyes\n0917 123 4567"
       }
     case "form-loan-release":
@@ -303,6 +310,7 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
         transaction_id: `${EXAMPLE_TXN_PREFIX}loan-release`,
         classification: "Loan Release",
         amount: -20000,
+        loan_id: `${EXAMPLE_TXN_PREFIX}loan-ben`,
         members: { name: "Ben Garcia", email: "ben@email.com" },
         description: "For the store's opening stock",
         loans: {
@@ -326,7 +334,7 @@ export function exampleReviewTxn(stepId: string | null, banks: Bank[]) {
         amount: 3600,
         members: null,
         investments: { name: "Rice trading" },
-        description: "October sales share"
+        receipt_urls: ["/tour/example-receipt-investment-return.png"]
       }
     default:
       return null

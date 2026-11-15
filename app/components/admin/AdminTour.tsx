@@ -63,7 +63,7 @@ const STEPS: Step[] = [
     targets: ["review-form"],
     via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Contribution",
-    text: "Check the amount and date against the bank app, and that the member's receipt shows the transfer. No receipt? Ask for one first. Above Approve you'll see the bank's balance after."
+    text: "Check the amount, date and bank against the bank app and the member's receipt below. No receipt? Ask for one first. Above Approve you'll see the bank's balance after."
   },
   {
     id: "form-loan-payment",
@@ -71,7 +71,7 @@ const STEPS: Step[] = [
     targets: ["review-form"],
     via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Loan payment",
-    text: "Check the amount landed in the bank shown, and the note says which loan and payment it is. Then approve; it comes off what's owed."
+    text: "The line at the top shows what's left on the loan. Check the amount landed in the bank shown and matches the member's receipt, then approve. It comes off what's owed."
   },
   {
     id: "review-out",

@@ -474,7 +474,10 @@ export default function AdminPage() {
   // One extra line of context under the card's type line. A Loan Release's
   // lending numbers get their own Fund check card in the review sheet
   // instead (see FundCheckCard); its card keeps just the warning chips.
-  function contextFor(t: QueueTxn): string | null {
+  function contextFor(t: QueueTxn & { example_context?: string | null }): string | null {
+    // The admin tour's example forms carry this line themselves -- there's
+    // no real loan or balance behind them to work it out from.
+    if (t.example_context) return t.example_context
     if (t.classification === "Member Withdrawal" && t.member_id && memberWithdrawable[t.member_id]) {
       const w = memberWithdrawable[t.member_id]
       const available = Math.max(0, w.withdrawableNow - (w.pendingOut - Math.abs(Number(t.amount))))
@@ -995,6 +998,15 @@ export default function AdminPage() {
   // made-up transaction of that type (see TourExamples) -- inert, since the
   // actions below refuse example ids.
   const tourFormTxn = tourStepShowing ? exampleReviewTxn(tourStepId, banks) : null
+  // The example loan release gets the real fund check against today's
+  // lending limits, same as a real request (read-only).
+  const tourNeedsLending = tourFormTxn?.classification === "Loan Release"
+  useEffect(() => {
+    if (!tourNeedsLending || lendingPosition) return
+    fetchLendingPosition()
+      .then(setLendingPosition)
+      .catch(() => {})
+  }, [tourNeedsLending, lendingPosition])
   const reviewingTxn = tourFormTxn ?? pendingTransactions.find((t) => t.transaction_id === reviewingTxnId) ?? null
   // Confirmed money rows have no sheet of their own to nest a reject prompt
   // inside (they're plain rows in the page, not opened via a sheet the way
