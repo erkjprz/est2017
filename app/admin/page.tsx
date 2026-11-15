@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import Navbar from "@/app/components/Navbar"
@@ -50,6 +50,8 @@ import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
+import { AdminTour } from "@/app/components/admin/AdminTour"
+import { hasSeenAdminTour, markAdminTourSeen } from "@/lib/adminTour"
 
 // Same in/out vocabulary as the transaction edit page's FLOW map -- money
 // coming in (Contribution, Loan Repayment) has nothing left for an admin
@@ -251,6 +253,35 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after hydration
     setLendingIsNew(!hasSeenLendingLimits())
   }, [])
+
+  // First-visit guided tour of this page (see AdminTour). Opens once per
+  // device, or again via /admin?tour=1 from Help. Its spotlight targets are
+  // the data-tour="..." attributes below.
+  const [showTour, setShowTour] = useState(false)
+  // Decided once per visit, so a later re-render can't pop it open on top
+  // of something else.
+  const tourDecided = useRef(false)
+  useEffect(() => {
+    if (tourDecided.current || checkingAccess || member?.role !== "admin") return
+    tourDecided.current = true
+    const params = new URLSearchParams(window.location.search)
+    const replay = params.get("tour") === "1"
+    if (replay) {
+      params.delete("tour")
+      const qs = params.toString()
+      window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`)
+    }
+    // A ?signup= / ?review= link is there to open one item's review sheet
+    // (see below) -- don't cover it with the tour; it'll show next visit.
+    if (!replay && (hasSeenAdminTour() || params.has("signup") || params.has("review"))) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and the URL are only readable after hydration
+    setShowTour(true)
+  }, [checkingAccess, member])
+
+  function closeTour() {
+    markAdminTourSeen()
+    setShowTour(false)
+  }
 
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
@@ -1018,6 +1049,7 @@ export default function AdminPage() {
                 here, whatever's in the queue below. */}
             <button
               onClick={() => router.push("/admin/members")}
+              data-tour="members"
               className="shrink-0 inline-flex items-center justify-center w-9 h-9 text-ink-soft border border-hairline rounded-full hover:bg-paper-2 hover:text-ink transition-colors"
               title="Members and borrowers"
               aria-label="Members and borrowers"
@@ -1036,6 +1068,7 @@ export default function AdminPage() {
               className={`relative shrink-0 inline-flex items-center justify-center w-9 h-9 border rounded-full hover:bg-paper-2 hover:text-ink transition-colors ${
                 lendingIsNew ? "text-gold border-gold/60" : "text-ink-soft border-hairline"
               }`}
+              data-tour="lending"
               title="Lending limits"
               aria-label={lendingIsNew ? "Lending limits (new)" : "Lending limits"}
             >
@@ -1050,7 +1083,9 @@ export default function AdminPage() {
               </svg>
             </button>
 
-            <MessagesButton />
+            <span data-tour="messages" className="inline-flex rounded-full">
+              <MessagesButton />
+            </span>
 
             {/* Page-level action, not scoped to any group -- always exports
                 the full transaction history regardless of what's filtered
@@ -1058,6 +1093,7 @@ export default function AdminPage() {
             <button
               onClick={exportTransactionsCsv}
               disabled={exporting}
+              data-tour="export"
               className="shrink-0 inline-flex items-center justify-center w-9 h-9 text-ink-soft border border-hairline rounded-full hover:bg-paper-2 hover:text-ink transition-colors disabled:opacity-60"
               title="Export full transaction history (every status, not just what's shown below) as a CSV backup"
               aria-label="Export CSV"
@@ -1072,7 +1108,7 @@ export default function AdminPage() {
             </button>
             </div>
           </div>
-          <h1 className="font-display text-3xl font-semibold">
+          <h1 data-tour="queue-count" className="font-display text-3xl font-semibold">
             {totalCount > 0 ? (
               <>
                 <span className="text-gold">{totalCount}</span> waiting on you
@@ -1160,7 +1196,7 @@ export default function AdminPage() {
 
                 <div className="mt-3 space-y-2">
                   {bulkTransactions.map((t) => (
-                    <div key={t.transaction_id} className="card overflow-hidden">
+                    <div key={t.transaction_id} data-tour="queue-item" className="card overflow-hidden">
                       <div className="flex items-center gap-3 px-4 py-3">
                         {bulkTransactions.length > 1 && (
                           <input
@@ -1324,6 +1360,7 @@ export default function AdminPage() {
                         key={t.transaction_id}
                         type="button"
                         onClick={() => setReviewingTxnId(t.transaction_id)}
+                        data-tour="queue-item"
                         className="w-full card overflow-hidden flex items-center gap-3 px-4 py-3 text-left"
                       >
                         <FlowBadge {...(FLOW[t.classification] ?? { arrow: "•", tone: "out" })} small />
@@ -1479,6 +1516,7 @@ export default function AdminPage() {
             <button
               onClick={() => setShowSearchFix(true)}
               aria-label="Search & Fix"
+              data-tour="search-fix"
               className="pointer-events-auto w-14 h-14 rounded-full bg-ink text-paper flex items-center justify-center shadow-lg"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
@@ -2124,6 +2162,7 @@ export default function AdminPage() {
       )}
 
       {showSearchFix && <SearchFixSheet onClose={() => setShowSearchFix(false)} />}
+      {showTour && <AdminTour onClose={closeTour} />}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
       {openReceipt && (
         <ReceiptModal paths={openReceipt.paths} startIndex={openReceipt.index} onClose={() => setOpenReceipt(null)} />

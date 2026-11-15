@@ -337,6 +337,7 @@ export default function Navbar() {
                 return (
                   <button
                     key={item.label}
+                    data-tour={`nav-${item.label.toLowerCase()}`}
                     onClick={() => router.push(item.path)}
                     className={`flex-1 flex flex-col items-center gap-0.5 py-2 dark:py-1.5 rounded-full transition-colors ${
                       active ? "bg-(--dock-active-bg) text-(--dock-icon-active)" : "text-(--dock-icon)"
