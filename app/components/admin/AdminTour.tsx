@@ -33,6 +33,12 @@ type Step = {
   via?: Via[]
   title: string
   text: string
+  // Starts a topic in the caption's "Go to" list.
+  topic?: string
+  // The in-app notification this step leads to, and who gets it -- taken
+  // from the database's notification triggers and the loan-payment-
+  // reminders job, so keep it in step with them.
+  notify?: string
 }
 
 // Written as "when this happens, here's what you do" rather than rules.
@@ -41,21 +47,24 @@ const STEPS: Step[] = [
     id: "welcome",
     path: "/admin",
     title: "Welcome, admin",
-    text: "Here's how things flow once you're an admin. Note that your approval moves the money."
+    text: "Here's how things flow once you're an admin. Note that your approval moves the money. Tap Topics any time to jump to a subject.",
+    topic: "Welcome"
   },
   {
     id: "queue",
     path: "/admin",
     targets: ["queue-count"],
     title: "Your approval queue",
-    text: "When a member sends something in or someone signs up, it lands here and you get an app notification."
+    text: "When a member sends something in or someone signs up, it lands here and you get an app notification.",
+    notify: "You get “Pending Approval” when a member sends something in, and “New Signup” when someone signs up."
   },
   {
     id: "review-in",
     path: "/admin",
     targets: ["queue-confirmed", "queue-decision", "queue-count"],
     title: "When something comes in",
-    text: "Tap it and match it with the bank app. If it checks out, approve it. Red labels mean look twice."
+    text: "Tap it and match it with the bank app. If it checks out, approve it. Red labels mean look twice.",
+    topic: "Approving money in"
   },
   {
     id: "form-contribution",
@@ -63,7 +72,8 @@ const STEPS: Step[] = [
     targets: ["review-form"],
     via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Contribution",
-    text: "Check the amount, date and bank against the bank app and the member's receipt below. No receipt? Ask for one first. Above Approve you'll see the bank's balance after."
+    text: "Check the amount, date and bank against the bank app and the member's receipt below. No receipt? Ask for one first. Above Approve you'll see the bank's balance after.",
+    notify: "When you approve, the member gets “Contribution Approved”. If you reject, they get “Contribution Not Approved” with your reason."
   },
   {
     id: "form-loan-payment",
@@ -71,14 +81,17 @@ const STEPS: Step[] = [
     targets: ["review-form"],
     via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Loan payment",
-    text: "The line at the top shows what's left on the loan. Check the amount landed in the bank shown and matches the member's receipt, then approve. It comes off what's owed."
+    text: "The line at the top shows what's left on the loan. Check the amount landed in the bank shown and matches the member's receipt, then approve. It comes off what's owed.",
+    notify: "The member gets “Loan Payment Approved”, and payment reminders for that due date stop."
   },
   {
     id: "review-out",
     path: "/admin",
     targets: ["queue-decision", "queue-confirmed", "queue-count"],
     title: "When money goes out",
-    text: "Withdrawals, loan releases and investment returns are reviewed one at a time: pick the bank the money left from and attach proof. If something's off, reject it with a reason so the member can fix it."
+    text: "Withdrawals, loan releases and investment returns are reviewed one at a time: pick the bank the money left from and attach proof. If something's off, reject it with a reason so the member can fix it.",
+    topic: "Approving money out",
+    notify: "Rejecting sends “Not Approved” with your reason. When they fix it and resend, you're notified again."
   },
   {
     id: "form-withdrawal",
@@ -86,7 +99,8 @@ const STEPS: Step[] = [
     targets: ["review-form"],
     via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Withdrawal",
-    text: "Check the amount and that they have enough available. Send it to the account under Send to, then pick the bank it left from here and attach the transfer screenshot. Approve once both are in."
+    text: "Check the amount and that they have enough available. Send it to the account under Send to, then pick the bank it left from here and attach the transfer screenshot. Approve once both are in.",
+    notify: "The member gets “Withdrawal Approved” once you approve."
   },
   {
     id: "form-loan-release",
@@ -101,7 +115,8 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["review-details", "review-form"],
     title: "Loan request: sending it",
-    text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. Approve & activate starts the loan today."
+    text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. Approve & activate starts the loan today.",
+    notify: "Whoever sent the request gets “Loan Release Approved”. The borrower then gets reminders: “Due Soon” 3 days before each due date, “Due Today”, and “Overdue” every 10 days until paid. It's also posted to Telegram."
   },
   {
     id: "form-investment-return",
@@ -109,21 +124,24 @@ const STEPS: Step[] = [
     targets: ["review-form"],
     via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Investment return",
-    text: "Check the investment and the amount against the bank shown and the receipt. Then approve."
+    text: "Check the investment and the amount against the bank shown and the receipt. Then approve.",
+    notify: "If a member sent it in, they get “Investment Return Approved”."
   },
   {
     id: "signup",
     path: "/admin",
     targets: ["queue-signup", "queue-count"],
     title: "When someone signs up",
-    text: "They show up under New signups. Once you know who they are, approve them."
+    text: "They show up under New signups. Once you know who they are, approve them.",
+    topic: "Signups"
   },
   {
     id: "fix",
     path: "/admin",
     targets: ["search-fix"],
     title: "When something was recorded wrong",
-    text: "Find it here, correct it, and let the member know what changed."
+    text: "Find it here, correct it, and let the member know what changed.",
+    topic: "Fixes and backups"
   },
   {
     id: "export",
@@ -138,7 +156,8 @@ const STEPS: Step[] = [
     targets: ["members-add"],
     via: [{ path: "/admin", target: "members", title: "Tap the Members icon", hint: "The people icon at the top of Admin opens everyone's details." }],
     title: "When someone joins or leaves",
-    text: "Add them here. To edit or deactivate someone, tap their name in the list."
+    text: "Add them here. To edit or deactivate someone, tap their name in the list.",
+    topic: "Members"
   },
   {
     id: "lending",
@@ -146,7 +165,8 @@ const STEPS: Step[] = [
     targets: ["lending-limits"],
     via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "The bar-chart icon, next to Members." }],
     title: "When a loan is requested",
-    text: "It's checked against these limits before you release it. They only change when everyone agrees."
+    text: "It's checked against these limits before you release it. They only change when everyone agrees.",
+    topic: "Lending limits"
   },
   {
     id: "messages",
@@ -154,7 +174,9 @@ const STEPS: Step[] = [
     targets: ["messages-list", "messages-title"],
     via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon", hint: "The chat bubble at the top of Admin opens every conversation." }],
     title: "When you or a member asks a question",
-    text: "It's a chat: a member can message the admins, and you can message a member. You get a notification, the conversation shows up here, and you reply right in the thread."
+    text: "It's a chat: a member can message the admins, and you can message a member. You get a notification, the conversation shows up here, and you reply right in the thread.",
+    topic: "Member questions",
+    notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”."
   },
   {
     id: "interest-monthly",
@@ -165,7 +187,8 @@ const STEPS: Step[] = [
       { target: "tx-type", title: "Tap Type", hint: "Choose what you're recording." }
     ],
     title: "When a bank credits interest",
-    text: "Record it here with + → Bank Interest, and attach a screenshot."
+    text: "Record it here with + → Bank Interest, and attach a screenshot.",
+    topic: "Bank interest"
   },
   {
     id: "interest-yearly",
@@ -183,7 +206,8 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=banks",
     targets: ["example-split"],
     title: "How bank interest is shared",
-    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with Shares in gains turned off get none."
+    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with Shares in gains turned off get none.",
+    notify: "When you confirm, each member gets “Bank Interest Distributed”."
   },
   {
     id: "loans",
@@ -191,14 +215,16 @@ const STEPS: Step[] = [
     targets: ["loans-attention", "loans-total"],
     via: [{ path: "/fund-breakdown", target: "tab-loans", title: "Tap the Loans tab", hint: "Every loan the fund has released." }],
     title: "When a loan is overdue or paid off",
-    text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared."
+    text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared.",
+    topic: "Loans"
   },
   {
     id: "loans-share",
     path: "/fund-breakdown?tab=loans",
     targets: ["example-split"],
     title: "How a loan's gain is shared",
-    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund."
+    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund.",
+    notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
   },
   {
     id: "investments-share",
@@ -206,7 +232,9 @@ const STEPS: Step[] = [
     targets: ["example-split"],
     via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab", hint: "Every venture the fund has put money into." }],
     title: "When an investment makes or loses money",
-    text: "Open it and tap Review & distribute. The gain, or loss, is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in."
+    text: "Open it and tap Review & distribute. The gain, or loss, is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
+    topic: "Investments",
+    notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”."
   },
   {
     id: "done",
@@ -215,6 +243,13 @@ const STEPS: Step[] = [
     text: "You can replay this tour any time from Help → Admin."
   }
 ]
+
+// The caption's "Go to" list: each topic and the step it starts on.
+const TOPICS = STEPS.flatMap((step, index) => (step.topic ? [{ name: step.topic, index }] : []))
+
+function topicOf(index: number) {
+  return [...TOPICS].reverse().find((t) => t.index <= index)?.name ?? null
+}
 
 const PAD = 6
 // Least room beside the spotlight the caption needs, before it's pinned to
@@ -326,6 +361,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const tapped = useRef<(() => void) | null>(null)
   const [tapping, setTapping] = useState(false)
   const tap = useCallback(() => tapped.current?.(), [])
+  // The caption's topic list, open in place of the step text.
+  const [showTopics, setShowTopics] = useState(false)
 
   const measure = useCallback(() => {
     setViewport({ w: window.innerWidth, h: window.innerHeight })
@@ -569,15 +606,60 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
             style={cardStyle}
           >
             <div className="flex items-start justify-between gap-3">
-              <p className="font-display font-semibold text-base leading-snug">{via ? via.title : step.title}</p>
-              <span className="shrink-0 text-[11px] font-mono text-ink-soft mt-0.5">
-                {index + 1}/{STEPS.length}
+              <p className="font-display font-semibold text-base leading-snug">
+                {showTopics ? "Go to a topic" : via ? via.title : step.title}
+              </p>
+              <span className="shrink-0 flex items-center gap-2 mt-0.5">
+                <span className="text-[11px] font-mono text-ink-soft">
+                  {index + 1}/{STEPS.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowTopics((v) => !v)}
+                  aria-expanded={showTopics}
+                  className="text-[11px] font-mono text-gold border border-gold/60 rounded-full px-2 py-0.5"
+                >
+                  {showTopics ? "Close" : "Topics ▾"}
+                </button>
               </span>
             </div>
+
+            {showTopics ? (
+              <ul className="mt-2 -mx-1">
+                {TOPICS.map((t) => {
+                  const current = topicOf(index) === t.name
+                  return (
+                    <li key={t.name}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowTopics(false)
+                          if (t.index !== index) go(t.index)
+                        }}
+                        className={`w-full flex items-center justify-between gap-3 px-2 py-2 rounded-lg text-left text-sm ${
+                          current ? "bg-gold/15 text-ink font-semibold" : "text-ink hover:bg-paper-2"
+                        }`}
+                      >
+                        <span>{t.name}</span>
+                        <span className="text-ink-soft">{current ? "You're here" : "→"}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+            <>
             <p className="mt-1 text-sm leading-relaxed text-ink-soft">{via ? via.hint : step.text}</p>
 
+            {!via && step.notify && (
+              <p className="mt-2.5 flex gap-2 rounded-lg bg-gold/10 px-2.5 py-2 text-[13px] leading-snug text-ink">
+                <span aria-hidden="true">🔔</span>
+                <span>{step.notify}</span>
+              </p>
+            )}
+
             {via ? (
-              <div className="mt-3 flex items-center gap-2">
+              <div className="sticky -bottom-4 -mx-4 -mb-4 mt-3 flex items-center gap-2 bg-paper px-4 pb-4 pt-2">
                 <button type="button" onClick={() => go(null)} className="text-xs text-ink-soft px-1 py-2 mr-auto">
                   Skip tour
                 </button>
@@ -598,7 +680,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                 </button>
               </div>
             ) : (
-            <div className="mt-3 flex items-center gap-2">
+            <div className="sticky -bottom-4 -mx-4 -mb-4 mt-3 flex items-center gap-2 bg-paper px-4 pb-4 pt-2">
               {isLast ? (
                 <span className="mr-auto" />
               ) : (
@@ -623,6 +705,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                 {isLast ? "Done" : index === 0 ? "Start" : "Next"}
               </button>
             </div>
+            )}
+            </>
             )}
           </div>
         )}
