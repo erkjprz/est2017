@@ -1645,13 +1645,16 @@ export default function AdminPage() {
                 // A Withdrawal/Loan Release has no bank until one is picked --
                 // nothing meaningful to preview yet.
                 if (impact.kind === "none" && impact.reason === "no_bank" && (needsWithdrawalBank || needsLoanBank)) return null
+                // data-tour: the admin tour's form steps light this up too.
                 return (
-                  <BankImpactPreview
-                    {...groupImpacts([impact])}
-                    noneReason={impact.kind === "none" ? impact.reason : undefined}
-                    balances={bankBalances}
-                    className="mb-3"
-                  />
+                  <div data-tour="review-impact">
+                    <BankImpactPreview
+                      {...groupImpacts([impact])}
+                      noneReason={impact.kind === "none" ? impact.reason : undefined}
+                      balances={bankBalances}
+                      className="mb-3"
+                    />
+                  </div>
                 )
               })()}
               {isDirty && (

@@ -30,6 +30,9 @@ type Step = {
   id: string
   path: string
   targets?: string[]
+  // More of the page to light up along with the target, when it's there --
+  // e.g. a form's "bank balance after" box, which sits in the sheet's footer.
+  alsoShow?: string[]
   via?: Via[]
   title: string
   text: string
@@ -70,6 +73,7 @@ const STEPS: Step[] = [
     id: "form-contribution",
     path: "/admin",
     targets: ["review-form"],
+    alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Every item opens a form to check before you approve.", optional: true }],
     title: "Contribution",
     text: "Check the amount, date and bank against the bank app and the member's receipt below. No receipt? Ask for one first. Above Approve you'll see the bank's balance after.",
@@ -79,6 +83,7 @@ const STEPS: Step[] = [
     id: "form-loan-payment",
     path: "/admin",
     targets: ["review-form"],
+    alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "A loan payment's form also shows what's left on the loan.", optional: true }],
     title: "Loan payment",
     text: "The line at the top shows what's left on the loan. Check that the amount reached the bank shown and matches the member's receipt, then approve. It comes off what's owed.",
@@ -97,6 +102,7 @@ const STEPS: Step[] = [
     id: "form-withdrawal",
     path: "/admin",
     targets: ["review-form"],
+    alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Money going out has a little more to fill in.", optional: true }],
     title: "Withdrawal",
     text: "Check the amount against what they have available, shown at the top. Send it to the account under Send to, then pick the bank it left from and attach the transfer screenshot. Approve once both are in.",
@@ -114,6 +120,7 @@ const STEPS: Step[] = [
     id: "form-loan-release-send",
     path: "/admin",
     targets: ["review-details", "review-form"],
+    alsoShow: ["review-impact"],
     title: "Loan request: sending it",
     text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. Approve & activate starts the loan today.",
     notify: "Whoever sent the request gets “Loan Release Approved”. The borrower then gets reminders: “Due Soon” 3 days before each due date, “Due Today”, and “Overdue” every 10 days until paid. It's also posted to Telegram."
@@ -122,6 +129,7 @@ const STEPS: Step[] = [
     id: "form-investment-return",
     path: "/admin",
     targets: ["review-form"],
+    alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", hint: "The last kind of item in the queue.", optional: true }],
     title: "Investment return",
     text: "Check the investment and the amount against the bank shown and the receipt. Then approve.",
@@ -307,6 +315,13 @@ function onPage(path: string) {
   return [...want.entries()].every(([k, v]) => have.get(k) === v)
 }
 
+// Every visible match for these targets (for a step's alsoShow).
+function findAll(targets: string[]): HTMLElement[] {
+  return targets.flatMap((t) =>
+    Array.from(document.querySelectorAll<HTMLElement>(`[data-tour="${t}"]`)).filter((el) => el.getClientRects().length > 0)
+  )
+}
+
 function findTarget(targets: string[] | undefined): HTMLElement | null {
   for (const t of targets ?? []) {
     // Last match wins: a sheet opened on top (the type picker over the
@@ -392,6 +407,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   // The screen, and the edges a caption must stay inside of.
   const [viewport, setViewport] = useState({ w: 0, h: 0, top: MARGIN, bottom: MARGIN })
   const target = useRef<HTMLElement | null>(null)
+  // The step's alsoShow targets, while it's showing (not during a tap).
+  const alsoShow = useRef<string[]>([])
   // While the tour is asking for a tap: its caption, how to resume once
   // tapped, and whether the press animation is playing.
   const [via, setVia] = useState<Via | null>(null)
@@ -400,6 +417,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const tap = useCallback(() => tapped.current?.(), [])
   // The caption's topic list, open in place of the step text.
   const [showTopics, setShowTopics] = useState(false)
+  // A step's notification note, folded into one line until tapped.
+  const [showNotify, setShowNotify] = useState(false)
   // The caption's natural height (text plus buttons), measured after each
   // render, so it's only placed beside the spotlight where it fully fits.
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -408,7 +427,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   useLayoutEffect(() => {
     const natural = (bodyRef.current?.scrollHeight ?? 0) + (footRef.current?.offsetHeight ?? 0)
     if (natural > 0 && Math.abs(natural - need) > 1) setNeed(natural)
-  }, [need, ready, via, showTopics, viewport.w])
+  }, [need, ready, via, showTopics, showNotify, viewport.w])
 
   const measure = useCallback(() => {
     const insets = safeInsets()
@@ -418,14 +437,25 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       setSpot(null)
       return
     }
-    const r = el.getBoundingClientRect()
+    const own = el.getBoundingClientRect()
+    let r = { top: own.top, left: own.left, right: own.right, bottom: own.bottom }
+    for (const extra of findAll(alsoShow.current)) {
+      const e = extra.getBoundingClientRect()
+      r = {
+        top: Math.min(r.top, e.top),
+        left: Math.min(r.left, e.left),
+        right: Math.max(r.right, e.right),
+        bottom: Math.max(r.bottom, e.bottom)
+      }
+    }
+    const height = r.bottom - r.top
     const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8
     setSpot({
       top: r.top - PAD,
       left: r.left - PAD,
-      width: r.width + PAD * 2,
-      height: r.height + PAD * 2,
-      radius: radius >= r.height / 2 ? 9999 : radius + PAD,
+      width: r.right - r.left + PAD * 2,
+      height: height + PAD * 2,
+      radius: radius >= height / 2 ? 9999 : radius + PAD,
       inSheet: !!el.closest("[data-sheet]")
     })
   }, [])
@@ -491,6 +521,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       }
 
       if (cancelled) return
+      alsoShow.current = step.alsoShow ?? []
       setAdminTourPhase("show")
       await ensurePage(step.path)
       if (!step.targets) {
@@ -708,10 +739,23 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                 <>
                   <p className="mt-1 text-sm leading-relaxed text-ink-soft">{via ? via.hint : step.text}</p>
                   {!via && step.notify && (
-                    <p className="mt-2.5 flex gap-2 rounded-lg bg-gold/10 px-2.5 py-2 text-[13px] leading-snug text-ink">
-                      <span aria-hidden="true">🔔</span>
-                      <span>{step.notify}</span>
-                    </p>
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowNotify((v) => !v)}
+                        aria-expanded={showNotify}
+                        className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-gold"
+                      >
+                        <span aria-hidden="true">🔔</span>
+                        Who gets notified
+                        <span aria-hidden="true" className={`text-[10px] transition-transform ${showNotify ? "rotate-90" : ""}`}>
+                          ▶
+                        </span>
+                      </button>
+                      {showNotify && (
+                        <p className="mt-1.5 rounded-lg bg-gold/10 px-2.5 py-2 text-[13px] leading-snug text-ink">{step.notify}</p>
+                      )}
+                    </div>
                   )}
                 </>
               )}
