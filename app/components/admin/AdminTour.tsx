@@ -17,11 +17,12 @@ import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourStep, setAdminTourStep } from "@/l
 // Targets are data-tour="..." attributes on those pages. Each step lists
 // them in order of preference; if none shows up the caption is centred.
 
-// A tap the tour plays before a step, so the admin sees how they'd get
-// there: spotlight `target` (on `path`, if given), caption it with `hint`,
-// then click it for real -- an icon opening its page, + opening the entry
-// sheet, a tab switching. Only played when moving forward with Next.
-type Via = { path?: string; target: string; hint: string }
+// A tap the tour asks for before a step, so the admin sees how they'd get
+// there: it spotlights `target` (on `path`, if given) with a pointing hand
+// and waits -- as long as they like -- for them to tap it (or the caption's
+// button). Then it clicks it for real: an icon opening its page, + opening
+// the entry sheet, a tab switching. Only asked when moving forward.
+type Via = { path?: string; target: string; title: string; hint: string }
 
 type Step = {
   id: string
@@ -86,7 +87,7 @@ const STEPS: Step[] = [
     id: "members",
     path: "/admin/members",
     targets: ["members-add"],
-    via: [{ path: "/admin", target: "members", hint: "Members opens from this icon." }],
+    via: [{ path: "/admin", target: "members", title: "Tap the Members icon", hint: "The people icon at the top of Admin opens everyone's details." }],
     title: "When someone joins or leaves",
     text: "Add them here. To edit or deactivate someone, tap their name in the list."
   },
@@ -94,7 +95,7 @@ const STEPS: Step[] = [
     id: "lending",
     path: "/admin/lending",
     targets: ["lending-limits"],
-    via: [{ path: "/admin", target: "lending", hint: "Lending limits open from this icon." }],
+    via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "The bar-chart icon, next to Members." }],
     title: "When a loan is requested",
     text: "It's checked against these limits before you release it. They only change when everyone agrees."
   },
@@ -102,7 +103,7 @@ const STEPS: Step[] = [
     id: "messages",
     path: "/messages",
     targets: ["messages-list", "messages-title"],
-    via: [{ path: "/admin", target: "messages", hint: "Member questions open from this icon." }],
+    via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon", hint: "The chat bubble at the top of Admin opens every conversation." }],
     title: "When you or a member asks a question",
     text: "It's a chat: a member can message the admins, and you can message a member. You get a notification, the conversation shows up here, and you reply right in the thread."
   },
@@ -111,8 +112,8 @@ const STEPS: Step[] = [
     path: "/dashboard",
     targets: ["type-bank_interest"],
     via: [
-      { path: "/dashboard", target: "new-fab", hint: "Everything you record starts from +." },
-      { target: "tx-type", hint: "Pick what you're recording." }
+      { path: "/dashboard", target: "new-fab", title: "Tap +", hint: "Everything you record starts here, on the Dashboard." },
+      { target: "tx-type", title: "Tap Type", hint: "Choose what you're recording." }
     ],
     title: "When a bank credits interest",
     text: "Record it here with + → Bank Interest, and attach a screenshot."
@@ -122,8 +123,8 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=banks",
     targets: ["bank-interest-due", "bank-total"],
     via: [
-      { path: "/admin", target: "nav-breakdown", hint: "Bank interest lives under Breakdown." },
-      { target: "tab-banks", hint: "Then the Banks tab." }
+      { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown", hint: "In the bottom bar. Bank interest lives here." },
+      { target: "tab-banks", title: "Tap the Banks tab", hint: "Each bank's balance and interest." }
     ],
     title: "At year end",
     text: "All bank interest is distributed at year end. Once December's interest is in, the year's total shows up here. Open each bank and tap Review & distribute."
@@ -132,7 +133,7 @@ const STEPS: Step[] = [
     id: "loans",
     path: "/fund-breakdown?tab=loans",
     targets: ["loans-attention", "loans-total"],
-    via: [{ path: "/fund-breakdown", target: "tab-loans", hint: "Loans is the next tab." }],
+    via: [{ path: "/fund-breakdown", target: "tab-loans", title: "Tap the Loans tab", hint: "Every loan the fund has released." }],
     title: "When a loan is overdue or paid off",
     text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared."
   },
@@ -149,6 +150,7 @@ const PAD = 6
 // the bottom of the screen instead.
 const MIN_CARD_ROOM = 200
 const GAP = 12
+const HAND_GAP = 52
 const MARGIN = 16
 // How long to wait for a page to load its target before showing the
 // caption centred in the meantime (the spotlight still moves onto it later).
@@ -238,9 +240,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const [spot, setSpot] = useState<Spot | null>(null)
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const target = useRef<HTMLElement | null>(null)
-  // While a transition plays: its caption, and whether it's mid-tap.
-  const [hint, setHint] = useState<string | null>(null)
+  // While the tour is asking for a tap: its caption, how to resume once
+  // tapped, and whether the press animation is playing.
+  const [via, setVia] = useState<Via | null>(null)
+  const tapped = useRef<(() => void) | null>(null)
   const [tapping, setTapping] = useState(false)
+  const tap = useCallback(() => tapped.current?.(), [])
 
   const measure = useCallback(() => {
     setViewport({ w: window.innerWidth, h: window.innerHeight })
@@ -290,23 +295,27 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
 
     async function run() {
       if (playVia) {
-        for (const via of step.via ?? []) {
-          if (via.path) await ensurePage(via.path)
-          const el = await waitFor(() => findTarget([via.target]), 5000)
+        for (const v of step.via ?? []) {
+          if (v.path) await ensurePage(v.path)
+          const el = await waitFor(() => findTarget([v.target]), 5000)
           if (cancelled) return
           if (!el) break
           point(el)
-          setHint(via.hint)
+          setVia(v)
           setReady(true)
-          await sleep(1400)
+          // Wait for the admin -- no timer, so there's time to read.
+          await new Promise<void>((resolve) => {
+            tapped.current = resolve
+          })
+          tapped.current = null
           if (cancelled) return
           setTapping(true)
-          await sleep(350)
+          await sleep(450)
           if (cancelled) return
           const clickable = el.matches("button, a") ? el : el.querySelector<HTMLElement>("button, a") ?? el
           clickable.click()
           setTapping(false)
-          setHint(null)
+          setVia(null)
           setReady(false)
           point(null)
           await sleep(400)
@@ -334,6 +343,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     run()
     return () => {
       cancelled = true
+      tapped.current = null
     }
   }, [step, playVia, router, measure])
 
@@ -371,17 +381,19 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   // scrolls inside itself if even that isn't enough. Centred when there's
   // nothing to point at.
   const cardWidth = Math.min(340, viewport.w - MARGIN * 2)
+  // Room for the pointing hand between a control to tap and its caption.
+  const gap = via ? HAND_GAP : GAP
   let cardStyle: CSSProperties
   if (spot && viewport.w) {
     const centre = spot.left + spot.width / 2
     const left = Math.min(Math.max(centre - cardWidth / 2, MARGIN), viewport.w - cardWidth - MARGIN)
-    const roomBelow = viewport.h - (spot.top + spot.height) - GAP - MARGIN
-    const roomAbove = spot.top - GAP - MARGIN
+    const roomBelow = viewport.h - (spot.top + spot.height) - gap - MARGIN
+    const roomAbove = spot.top - gap - MARGIN
     if (Math.max(roomBelow, roomAbove) >= MIN_CARD_ROOM) {
       cardStyle =
         roomBelow >= roomAbove
-          ? { left, top: spot.top + spot.height + GAP, width: cardWidth, maxHeight: roomBelow }
-          : { left, bottom: viewport.h - spot.top + GAP, width: cardWidth, maxHeight: roomAbove }
+          ? { left, top: spot.top + spot.height + gap, width: cardWidth, maxHeight: roomBelow }
+          : { left, bottom: viewport.h - spot.top + gap, width: cardWidth, maxHeight: roomAbove }
     } else {
       // Too tall to caption beside (e.g. a whole list of examples): pin the
       // caption to the bottom of the screen, over the end of the spotlight.
@@ -402,6 +414,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     }
   }
 
+  // The hand sits in the gap on the caption's side of the control.
+  const handAbove = !!spot && viewport.h - (spot.top + spot.height) < spot.top
+
   return (
     <Portal>
       <div className="fixed inset-0 z-[60] font-sans" role="dialog" aria-modal="true" aria-label="Admin tour">
@@ -410,9 +425,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
 
         {ready && spot ? (
           <div
-            className={`absolute pointer-events-none ring-2 ring-gold motion-safe:transition-all motion-safe:duration-300 ${
-              tapping ? "bg-gold/25 motion-safe:scale-95" : ""
-            }`}
+            className={`absolute ring-2 ring-gold motion-safe:transition-all motion-safe:duration-300 ${
+              via ? "ring-4 cursor-pointer" : "pointer-events-none"
+            } ${tapping ? "bg-gold/30 motion-safe:scale-90" : ""}`}
             style={{
               top: spot.top,
               left: spot.left,
@@ -421,9 +436,37 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
               borderRadius: spot.radius,
               boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.45)"
             }}
-          />
+            // Tapping the highlighted control itself carries on the tour.
+            onClick={via ? tap : undefined}
+            role={via ? "button" : undefined}
+            aria-label={via ? via.title : undefined}
+          >
+            {via && !tapping && (
+              <span
+                className="absolute inset-0 ring-4 ring-gold motion-safe:animate-ping pointer-events-none"
+                style={{ borderRadius: spot.radius }}
+              />
+            )}
+          </div>
         ) : (
           <div className="absolute inset-0 bg-black/45 pointer-events-none" />
+        )}
+
+        {/* Pointing hand on the control to tap, in the gap between it and
+            the caption -- below it, or above it near the bottom of the
+            screen (+, the bottom bar). */}
+        {ready && spot && via && !tapping && (
+          <span
+            aria-hidden="true"
+            className="absolute pointer-events-none text-3xl leading-none drop-shadow-lg motion-safe:animate-bounce"
+            style={
+              handAbove
+                ? { left: spot.left + spot.width / 2 - 15, top: spot.top - 42 }
+                : { left: spot.left + spot.width / 2 - 15, top: spot.top + spot.height + 6 }
+            }
+          >
+            {handAbove ? "👇" : "👆"}
+          </span>
         )}
 
         {ready && (
@@ -432,19 +475,33 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
             style={cardStyle}
           >
             <div className="flex items-start justify-between gap-3">
-              <p className="font-display font-semibold text-base leading-snug">{step.title}</p>
+              <p className="font-display font-semibold text-base leading-snug">{via ? via.title : step.title}</p>
               <span className="shrink-0 text-[11px] font-mono text-ink-soft mt-0.5">
                 {index + 1}/{STEPS.length}
               </span>
             </div>
-            <p className="mt-1 text-sm leading-relaxed text-ink-soft">{hint ?? step.text}</p>
+            <p className="mt-1 text-sm leading-relaxed text-ink-soft">{via ? via.hint : step.text}</p>
 
-            {hint ? (
+            {via ? (
               <div className="mt-3 flex items-center gap-2">
                 <button type="button" onClick={() => go(null)} className="text-xs text-ink-soft px-1 py-2 mr-auto">
                   Skip tour
                 </button>
-                <span className="text-xs font-mono text-gold motion-safe:animate-pulse">Opening…</span>
+                <button
+                  type="button"
+                  onClick={() => go(index - 1)}
+                  className="border border-hairline text-ink-soft px-4 py-2 rounded-full text-sm font-semibold"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={tap}
+                  disabled={tapping}
+                  className="bg-gold text-paper px-5 py-2 rounded-full text-sm font-bold"
+                >
+                  Tap it
+                </button>
               </div>
             ) : (
             <div className="mt-3 flex items-center gap-2">
