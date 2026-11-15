@@ -48,7 +48,7 @@ import { MessagesButton } from "@/app/components/admin/MessagesButton"
 import { FirstPaymentConfirm, needsFirstPaymentConfirm } from "@/app/components/admin/FirstPaymentConfirm"
 import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
-import { checkLoanRequest, fetchLendingPosition, hasSeenLendingLimits, type LendingPosition } from "@/lib/lendingLimits"
+import { checkLoanRequest, fetchLendingPosition, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
 import { hasSeenAdminTour, isAdminTourActive, startAdminTour } from "@/lib/adminTour"
 import { useAdminTourStep } from "@/app/components/admin/AdminTour"
@@ -252,14 +252,6 @@ export default function AdminPage() {
   const [loansToClose, setLoansToClose] = useState<LoanToClose[]>([])
   // Only fetched while a Loan Release is waiting -- see loadQueueContext.
   const [lendingPosition, setLendingPosition] = useState<LendingPosition | null>(null)
-  // "New" badge on the lending limits button until this admin has opened
-  // the page once. Read after mount -- browser storage isn't there on the
-  // server render.
-  const [lendingIsNew, setLendingIsNew] = useState(false)
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is only readable after hydration
-    setLendingIsNew(!hasSeenLendingLimits())
-  }, [])
 
   // First-visit guided tour for a new admin (see AdminTour, mounted in the
   // root layout). Starts once per device, or again via /admin?tour=1 from
@@ -1092,18 +1084,11 @@ export default function AdminPage() {
                 are checked against. */}
             <button
               onClick={() => router.push("/admin/lending")}
-              className={`relative shrink-0 inline-flex items-center justify-center w-9 h-9 border rounded-full hover:bg-paper-2 hover:text-ink transition-colors ${
-                lendingIsNew ? "text-gold border-gold/60" : "text-ink-soft border-hairline"
-              }`}
+              className="shrink-0 inline-flex items-center justify-center w-9 h-9 text-ink-soft border border-hairline rounded-full hover:bg-paper-2 hover:text-ink transition-colors"
               data-tour="lending"
               title="Lending limits"
-              aria-label={lendingIsNew ? "Lending limits (new)" : "Lending limits"}
+              aria-label="Lending limits"
             >
-              {lendingIsNew && (
-                <span className="absolute -top-1.5 -right-2 bg-gold-soft text-ink text-[8px] font-mono font-bold uppercase tracking-wide leading-none rounded-full px-1.5 py-[3px] shadow-sm">
-                  New
-                </span>
-              )}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
                 <path d="M4 20h16" />
                 <path d="M6 16V11M10 16V7M14 16v-5M18 16V4" />

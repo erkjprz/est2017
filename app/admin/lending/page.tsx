@@ -10,7 +10,6 @@ import {
   availableToLend,
   fetchLendingPosition,
   holdPct,
-  markLendingLimitsSeen,
   saveLendingLimits,
   type LendingPosition
 } from "@/lib/lendingLimits"
@@ -74,7 +73,6 @@ export default function LendingLimitsPage() {
       router.push("/dashboard")
       return
     }
-    markLendingLimitsSeen()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loads data once the auth check above passes
     load()
   }, [authLoading, member, router, load])

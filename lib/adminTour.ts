@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react"
 
 // The admin tour (app/components/admin/AdminTour.tsx) opens by itself the
-// first time someone opens /admin on this device, the same per-device
-// approach as the lending limits "New" badge (see lib/lendingLimits.ts).
+// first time someone opens /admin on this device (remembered per device,
+// in localStorage).
 // Help → Admin can replay it any time via /admin?tour=1.
 //
 // The tour moves across pages, so the step it's on lives in sessionStorage
