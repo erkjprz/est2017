@@ -66,7 +66,7 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-confirmed", "queue-decision", "queue-count"],
     title: "When something comes in",
-    text: "Contributions and loan payments are money already in the bank, so they only need confirming. Red labels flag something to look at twice.",
+    text: "Contributions and loan payments are money already in the bank, so they only need confirming. With more than one, tick them (or tick the heading for all) and approve them together. Reject is one at a time, from each item. Red labels flag something to look at twice.",
     topic: "Approving money in"
   },
   {
