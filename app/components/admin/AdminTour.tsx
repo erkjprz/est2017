@@ -54,7 +54,10 @@ type Step = {
   alsoShow?: string[]
   via?: Via[]
   title: string
+  // One short line.
   text: string
+  // The rest of the explanation, behind "More" (with the notification note).
+  more?: string
   // Starts a topic in the caption's "Go to" list.
   topic?: string
   // A chapter card: a short divider that opens a group of topics (Every
@@ -73,14 +76,15 @@ const STEPS: Step[] = [
     id: "welcome",
     path: "/admin",
     title: "Welcome, admin",
-    text: "Here's how things flow once you're an admin. Your approval moves the money. Tap the step count any time to jump to a subject.",
+    text: "A quick look at what admins do. Your approval moves the money.",
+    more: "Tap the step count any time to jump to a subject. Swipe this card right to go back, or down to close.",
     topic: "Welcome"
   },
   {
     id: "chapter-daily",
     path: "",
     title: "Every day",
-    text: "The approval queue: what lands in it, and how to clear it.",
+    text: "Clearing the approval queue.",
     chapter: "Every day"
   },
   {
@@ -88,7 +92,8 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-count"],
     title: "Your approval queue",
-    text: "Everything waiting for an admin lands here: money members send in, money they ask for, and new signups.",
+    text: "Everything waiting for you lands here.",
+    more: "Money members send in, money they ask for, and new signups.",
     notify: "You get “Pending Approval” when a member sends something in, and “New Signup” when someone signs up.",
     topic: "Your queue"
   },
@@ -97,7 +102,8 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-confirmed", "queue-decision", "queue-count"],
     title: "When something comes in",
-    text: "Contributions and loan payments are money already in the bank, so they only need confirming. When there’s more than one, you can bulk approve. [Reject] is one at a time. Red labels flag something to look at twice.",
+    text: "Money already in the bank only needs confirming.",
+    more: "Contributions and loan payments. Tick several to approve them together. [Reject] is one at a time. Red labels flag something to look at twice.",
     topic: "Approving money in"
   },
   {
@@ -107,7 +113,8 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Let's open a contribution to review.", optional: true }],
     title: "Contribution",
-    text: "Check the amount, date and bank against the bank app and the member's receipt below. Above [Approve] you'll see the balance movements.",
+    text: "Check the amount, bank and receipt against your bank app.",
+    more: "Your approval moves the money. The box above [Approve] shows each bank balance after.",
     notify: "Approving sends the member “Contribution Approved”. Rejecting sends “Contribution Not Approved” with your reason."
   },
   {
@@ -117,7 +124,8 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Now a loan payment to review.", optional: true }],
     title: "Loan payment",
-    text: "The line at the top shows what's left on the loan. Check the amount against the bank and the member's receipt, then [Approve]. It comes off what's owed.",
+    text: "Check the amount and receipt against your bank app.",
+    more: "The line at the top shows what's left on the loan. The payment comes off it.",
     notify: "The member gets “Loan Payment Approved”, and payment reminders for that due date stop."
   },
   {
@@ -125,7 +133,8 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-decision-top", "queue-decision", "queue-confirmed", "queue-count"],
     title: "When money goes out",
-    text: "Withdrawals, loan releases and investment returns are reviewed one at a time. For withdrawals and loans, send the money first, then [Approve].",
+    text: "Each one is reviewed on its own.",
+    more: "Withdrawals, loan releases and investment returns. For withdrawals and loans, send the money first, then [Approve].",
     notify: "After you reject something, the member can fix it and resend it, and you're notified again.",
     topic: "Approving money out"
   },
@@ -136,7 +145,8 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Let's open a withdrawal to review.", optional: true }],
     title: "Withdrawal",
-    text: "Check the amount against what's available at the top. Send it to the account under Send to, then pick the bank it left from and attach the transfer screenshot. [Approve] once both are in.",
+    text: "Send it, then add the bank and transfer screenshot.",
+    more: "Check the amount against what's available at the top. Send it to the account under Send to, then [Approve].",
     notify: "The member gets “Withdrawal Approved”."
   },
   {
@@ -145,7 +155,8 @@ const STEPS: Step[] = [
     targets: ["review-terms", "review-form"],
     via: [{ path: "/admin", target: "example-loan-release", title: "Tap Ben's loan request", hint: "Now a loan request to review.", optional: true }],
     title: "Loan request: the terms",
-    text: "Check the interest, term and first payment date. You can change them and [Save]. The fund check below shows if it fits the lending limits."
+    text: "Check the interest, term and first payment.",
+    more: "Change them and [Save] if needed. The fund check shows whether it fits the lending limits."
   },
   {
     id: "form-loan-release-send",
@@ -153,7 +164,8 @@ const STEPS: Step[] = [
     targets: ["review-details", "review-form"],
     alsoShow: ["review-impact"],
     title: "Loan request: sending it",
-    text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. [Approve & activate] starts the loan today.",
+    text: "Send it, then add the bank and transfer screenshot.",
+    more: "[Approve & activate] starts the loan today.",
     notify: "Whoever sent the request gets “Loan Release Approved”. The borrower then gets reminders: “Due Soon” 3 days before each due date, “Due Today”, and “Overdue” every 10 days until paid. It's also posted to Telegram."
   },
   {
@@ -163,7 +175,7 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", hint: "Now an investment return to review.", optional: true }],
     title: "Investment return",
-    text: "Check the investment and the amount against the bank shown and the receipt. Then [Approve].",
+    text: "Check the amount and receipt against the bank.",
     notify: "If a member sent it in, they get “Investment Return Approved”."
   },
   {
@@ -171,7 +183,8 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-signup", "queue-count"],
     title: "When someone signs up",
-    text: "Members show up under New signups, borrowers under Borrower requests. Once you know who they are, [Approve] them.",
+    text: "[Approve] them once you know who they are.",
+    more: "Members show up under New signups, borrowers under Borrower requests.",
     topic: "Signups"
   },
   {
@@ -179,8 +192,9 @@ const STEPS: Step[] = [
     path: "/messages",
     targets: ["messages-list", "messages-title"],
     via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon", hint: "Let's open member questions." }],
-    title: "When you or a member asks a question",
-    text: "It's a chat: members can message the admins, and you can message a member. Every conversation is here, and you reply right in the thread.",
+    title: "Member questions",
+    text: "Reply right in the thread.",
+    more: "Members can message the admins, and you can message a member.",
     notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”.",
     topic: "Member questions"
   },
@@ -188,7 +202,7 @@ const STEPS: Step[] = [
     id: "chapter-monthly",
     path: "",
     title: "Every month",
-    text: "Recording bank interest and keeping a backup.",
+    text: "Bank interest and a backup.",
     chapter: "Every month"
   },
   {
@@ -201,31 +215,33 @@ const STEPS: Step[] = [
       { target: "tx-type", title: "Tap Type", hint: "Recording bank interest: choose the transaction type." },
       { target: "type-bank_interest", title: "Tap Bank Interest", hint: "Recording bank interest: pick it from the Admin list." }
     ],
-    title: "When a bank credits interest",
-    text: "Enter the amount, choose the bank and attach a screenshot of the statement, then [Submit].",
+    title: "Bank interest",
+    text: "Enter the amount, pick the bank, attach the statement.",
+    more: "Do this whenever a bank credits interest, then [Submit].",
     topic: "Bank interest"
   },
   {
     id: "export",
     path: "/admin",
     targets: ["export"],
-    title: "At the end of each month",
-    text: "Download the full ledger here to keep a backup.",
+    title: "Backups",
+    text: "Download the full ledger each month.",
     topic: "Backups"
   },
   {
     id: "chapter-sometimes",
     path: "",
     title: "Now and then",
-    text: "Fixing mistakes, closing loans, sharing investment gains and the year’s bank interest.",
+    text: "Fixes, loans, investments and year-end interest.",
     chapter: "Now and then"
   },
   {
     id: "fix",
     path: "/admin",
     targets: ["search-fix"],
-    title: "When something was recorded wrong",
-    text: "Find it here, correct it, and let the member know what changed.",
+    title: "Fixing mistakes",
+    text: "Find the entry here and correct it.",
+    more: "Then let the member know what changed.",
     topic: "Fixing mistakes"
   },
   {
@@ -236,16 +252,18 @@ const STEPS: Step[] = [
       { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown", hint: "Let's check on loans. Open the fund breakdown." },
       { target: "tab-loans", title: "Tap the Loans tab", hint: "Checking on loans: open the Loans tab." }
     ],
-    title: "When a loan is overdue or paid off",
-    text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared.",
+    title: "Loans",
+    text: "Overdue and paid-off loans show here.",
+    more: "Follow up on an overdue one. Close a paid-off one so its gain is shared.",
     topic: "Loans"
   },
   {
     id: "loans-share",
     path: "/fund-breakdown?tab=loans",
     targets: ["example-split"],
-    title: "How a loan's gain is shared",
-    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund.",
+    title: "A loan's gain",
+    text: "Closing a loan shares its interest for you.",
+    more: "Split by what each member had in the fund the day it closes. A borrower shares too, if they had money in.",
     notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
   },
   {
@@ -253,8 +271,9 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=investments",
     targets: ["example-split"],
     via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab", hint: "Let's look at investments." }],
-    title: "When an investment makes or loses money",
-    text: "Open it and tap [Review & distribute]. The gain or loss is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
+    title: "Investments",
+    text: "When one gains or loses, open it and tap [Review & distribute].",
+    more: "Split by what each member had in the fund on the date you pick. You can distribute more than once.",
     notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”.",
     topic: "Investments"
   },
@@ -263,23 +282,25 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=banks",
     targets: ["bank-interest-due", "bank-total"],
     via: [{ path: "/fund-breakdown", target: "tab-banks", title: "Tap the Banks tab", hint: "Let's look at the year's bank interest." }],
-    title: "At year end",
-    text: "Bank interest is shared out once a year. In January, once December's interest is in for every bank, last year's total shows up here. Open each bank and tap [Review & distribute].",
+    title: "Year-end interest",
+    text: "Each January, open each bank and tap [Review & distribute].",
+    more: "Once December's interest is in for every bank, last year's total shows up here.",
     topic: "Year-end interest"
   },
   {
     id: "interest-share",
     path: "/fund-breakdown?tab=banks",
     targets: ["example-split"],
-    title: "How bank interest is shared",
-    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with [Shares in gains] turned off get none.",
+    title: "How it's shared",
+    text: "The app works out everyone's share.",
+    more: "It follows what each member had in the fund on Dec 31. Borrower accounts and anyone with [Shares in gains] off get none.",
     notify: "When you confirm, each member gets “Bank Interest Distributed”."
   },
   {
     id: "chapter-settings",
     path: "",
     title: "Settings",
-    text: "Who’s in the fund, and how much it can lend.",
+    text: "Who's in the fund, and how much it can lend.",
     chapter: "Settings"
   },
   {
@@ -287,8 +308,8 @@ const STEPS: Step[] = [
     path: "/admin/members",
     targets: ["members-add"],
     via: [{ path: "/admin", target: "members", title: "Tap the Members icon", hint: "Let's open the member list." }],
-    title: "When someone joins or leaves",
-    text: "Add them with [+ Add]. To edit or deactivate someone, tap their name in the list.",
+    title: "Members",
+    text: "Add with [+ Add]. Tap a name to edit or deactivate.",
     topic: "Members"
   },
   {
@@ -297,35 +318,39 @@ const STEPS: Step[] = [
     targets: ["lending-available"],
     via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "Let's open the lending limits." }],
     title: "Available to lend",
-    text: "How much more can go out on loan: the Total loans limit's share of the fund, minus what's already out. The bar fills as loans go out.",
+    text: "How much more can go out on loan.",
+    more: "The Total loans limit's share of the fund, minus what's already out.",
     topic: "Lending limits"
   },
   {
     id: "lending",
     path: "/admin/lending",
     targets: ["lending-limits"],
-    title: "When a loan is requested",
-    text: "Each request is checked against these limits. Going over shows a warning on the request but doesn't block it. Change the limits only when everyone agrees."
+    title: "Lending limits",
+    text: "Every loan request is checked against these.",
+    more: "Going over warns on the request but doesn't block it. Change them only when everyone agrees."
   },
   {
     id: "lending-borrowers",
     path: "/admin/lending",
     targets: ["lending-borrowers"],
     title: "Borrowers",
-    text: "Each borrower's unpaid loans plus any pending request, as a share of the fund. A share in red is over the Per borrower limit."
+    text: "Each borrower's share of the fund. Red is over the limit.",
+    more: "Unpaid loans plus any pending request, against the Per borrower limit."
   },
   {
     id: "lending-holds",
     path: "/admin/lending",
     targets: ["lending-holds"],
     title: "Member holds",
-    text: "When a loan goes out, each member's share of it is on hold until it's repaid. The same goes for money in investments. Money on hold can't be withdrawn. The Member hold limit warns when a loan would tie up too much of anyone's money."
+    text: "Money lent out or invested is on hold until it's back.",
+    more: "Money on hold can't be withdrawn. The Member hold limit warns when a loan would tie up too much of anyone's money."
   },
   {
     id: "done",
     path: "/admin",
     title: "You're all set",
-    text: "You can replay this tour any time from Help → Admin."
+    text: "Replay this any time from Help → Admin."
   }
 ]
 
@@ -450,6 +475,8 @@ type Spot = {
   radius: number
   inSheet: boolean
   fixed: boolean
+  // In a form: where its scrolling body starts, under the form's header.
+  bodyTop?: number
 }
 
 function isFixed(el: HTMLElement) {
@@ -584,7 +611,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       height: height + PAD * 2,
       radius: radius >= height / 2 ? 9999 : radius + PAD,
       inSheet: !!el.closest("[data-sheet]"),
-      fixed: isFixed(el)
+      fixed: isFixed(el),
+      bodyTop: el.closest("[data-sheet]") ? scrollerOf(el)?.getBoundingClientRect().top : undefined
     })
   }, [])
 
@@ -614,6 +642,15 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       target.current = el
       if (el) reveal(el)
       measure()
+      // A sheet slides up as it opens, which no scroll or resize event
+      // reports -- follow it for its first second.
+      const until = Date.now() + 1000
+      const follow = () => {
+        if (cancelled || target.current !== el) return
+        measure()
+        if (Date.now() < until) requestAnimationFrame(follow)
+      }
+      if (el) requestAnimationFrame(follow)
     }
 
     async function run() {
@@ -723,6 +760,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const bottomCardBottom = viewport.dock - CARD_SIDE
   const bottomCardTop = bottomCardBottom - cardH
   const topCardBottom = viewport.top + cardH
+  // In a form, the card sits at the very foot of the screen (over the
+  // form's buttons), just clear of the home indicator.
+  const sheetCardBottom = viewport.bottom - MARGIN + CARD_SIDE
+  const sheetCardTop = viewport.h - sheetCardBottom - cardH
+  // Where a form's scrolling body starts, under its header.
+  const sheetBodyTop = spot?.bodyTop ?? viewport.top
   const handRoom = GAP
   // The page between the top bar and the docked card: where a page target
   // is scrolled to -- centred there when it fits, else its top just under
@@ -748,9 +791,13 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     spotBottom <= (spot.fixed ? viewport.h - viewport.bottom + PAD : lowest)
   const fitsBelow = onScreen && !spot.inSheet && spotBottom + handRoom + cardH <= lowest
   const fitsAbove = onScreen && spot.top - handRoom - cardH >= viewport.top
-  const mode: "below" | "above" | "bottom" | "top" | "center" = !spot
+  // A form (in a sheet): the caption docks at the foot of the screen, over
+  // the form's own buttons, and the dim hides the form's header.
+  const mode: "sheet" | "below" | "above" | "bottom" | "top" | "center" = !spot
     ? "center"
-    : fitsBelow
+    : spot.inSheet && !via
+      ? "sheet"
+      : fitsBelow
       ? "below"
       : fitsAbove
         ? "above"
@@ -775,13 +822,13 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       if (Math.abs(scrollWanted) < 4) return
       autoScrolls.current += 1
       scrollBy(null, scrollWanted, true)
-    } else if (mode === "top" && spot.inSheet && target.current) {
-      const wanted = spot.top - (topCardBottom + GAP)
+    } else if ((mode === "top" || mode === "sheet") && spot.inSheet && target.current) {
+      const wanted = spot.top - (mode === "top" ? topCardBottom + GAP : sheetBodyTop + PAD)
       if (wanted >= -4) return
       autoScrolls.current += 1
       scrollBy(scrollerOf(target.current), wanted, true)
     }
-  }, [ready, spot, mode, roomTop, roomBottom, scrollWanted, topCardBottom, viewport.h])
+  }, [ready, spot, mode, roomTop, roomBottom, scrollWanted, topCardBottom, sheetBodyTop, viewport.h])
 
   // The tour keeps taps off the page, but a drag (or the mouse wheel)
   // still scrolls whatever is underneath -- so the rest of an example form
@@ -794,6 +841,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   else if (mode === "above") cardStyle = { left: cardLeft, width: cardWidth, top: spot!.top - handRoom - cardH, maxHeight: maxCardH }
   else if (mode === "bottom") cardStyle = { left: cardLeft, width: cardWidth, bottom: viewport.h - bottomCardBottom, maxHeight: maxCardH }
   else if (mode === "top") cardStyle = { left: cardLeft, width: cardWidth, top: viewport.top, maxHeight: maxCardH }
+  else if (mode === "sheet") cardStyle = { left: cardLeft, width: cardWidth, bottom: sheetCardBottom, maxHeight: maxCardH }
   else
     cardStyle = {
       left: cardLeft,
@@ -808,17 +856,24 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   // A control fixed in place (the bottom bar, +) keeps its outline.
   let lit = spot
   if (spot && !spot.fixed) {
-    const top = Math.max(spot.top, mode === "top" ? topCardBottom + GAP : spot.inSheet ? spot.top : viewport.header)
-    const bottom = Math.min(spot.top + spot.height, mode === "bottom" ? bottomCardTop - GAP : viewport.h)
+    const top = Math.max(
+      spot.top,
+      mode === "top" ? topCardBottom + GAP : mode === "sheet" ? sheetBodyTop : spot.inSheet ? spot.top : viewport.header
+    )
+    const bottom = Math.min(
+      spot.top + spot.height,
+      mode === "bottom" ? bottomCardTop - GAP : mode === "sheet" ? sheetCardTop - GAP : viewport.h
+    )
     if (bottom - top > 24) lit = { ...spot, top, height: bottom - top }
   }
 
-  // A light dim, so the page still reads as the app around what's lit.
-  // A form (in a sheet) isn't dimmed or outlined at all: the whole form is
-  // what the step is about. (The overlay only renders client-side, after
-  // the theme class is on <html>.)
-  const dim = document.documentElement.classList.contains("dark") ? "rgba(0, 0, 0, 0.5)" : "rgba(0, 0, 0, 0.3)"
-  const plainForm = !via && !!spot?.inSheet
+  // A light dim, so the page still reads as the app around what's lit. On
+  // a form it's nearly opaque instead: the form's header and buttons fade
+  // away and only its fields show, with no outline. (The overlay only
+  // renders client-side, after the theme class is on <html>.)
+  const dark = document.documentElement.classList.contains("dark")
+  const plainForm = mode === "sheet"
+  const dim = plainForm ? (dark ? "rgba(0, 0, 0, 0.88)" : "rgba(0, 0, 0, 0.6)") : dark ? "rgba(0, 0, 0, 0.5)" : "rgba(0, 0, 0, 0.3)"
 
   const caption = via ? via.hint : step.text
   const big = !!step.chapter || !step.targets
@@ -847,7 +902,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           onWheel={(e) => scrollBy(scrollerAt(e.clientX, e.clientY, overlayRef.current), e.deltaY)}
         />
 
-        {ready && lit && plainForm ? null : ready && lit ? (
+        {ready && lit ? (
           <div
             // Only the press animates. Position and size follow the page
             // as it scrolls; animating them too made the spotlight trail
@@ -862,7 +917,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
               height: lit.height,
               borderRadius: lit.radius,
               // A thin outline, then the dim over the rest of the page.
-              boxShadow: `0 0 0 1.5px color-mix(in srgb, var(--gold) 75%, transparent), 0 0 0 9999px ${dim}`
+              boxShadow: `${plainForm ? "" : "0 0 0 1.5px color-mix(in srgb, var(--gold) 75%, transparent), "}0 0 0 9999px ${dim}`
             }}
             // Tapping the highlighted control itself carries on the tour.
             onClick={via ? tap : undefined}
@@ -956,7 +1011,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                     {caption && (
                       <p className="mt-0.5 text-[14px] leading-snug text-ink-soft">
                         <Caption text={caption} />
-                        {!via && step.notify && !showNotify && (
+                        {!via && (step.more || step.notify) && !showNotify && (
                           <>
                             {" "}
                             <button
@@ -968,6 +1023,11 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                             </button>
                           </>
                         )}
+                      </p>
+                    )}
+                    {!via && step.more && showNotify && (
+                      <p className="mt-1.5 text-[13px] leading-snug text-ink-soft">
+                        <Caption text={step.more} />
                       </p>
                     )}
                     {!via && step.notify && showNotify && (
