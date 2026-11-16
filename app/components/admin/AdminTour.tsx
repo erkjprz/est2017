@@ -418,6 +418,30 @@ function reveal(el: HTMLElement) {
   } else el.scrollIntoView({ block: "center", behavior: "smooth" })
 }
 
+// What scrolls at this point of the screen, looking past the tour's own
+// layers: a sheet's body, a scrolling list, else the page.
+function scrollerAt(x: number, y: number, overlay: HTMLElement | null): HTMLElement | null {
+  for (const hit of document.elementsFromPoint(x, y)) {
+    if (overlay?.contains(hit)) continue
+    return scrollerOf(hit as HTMLElement)
+  }
+  return null
+}
+
+function scrollerOf(el: HTMLElement): HTMLElement | null {
+  for (let node: HTMLElement | null = el; node && node !== document.body; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight + 1) return node
+  }
+  return null
+}
+
+function scrollBy(scroller: HTMLElement | null, top: number, smooth = false) {
+  const behavior = smooth ? "smooth" : "instant"
+  if (scroller) scroller.scrollBy({ top, behavior })
+  else window.scrollBy({ top, behavior })
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // The target's box on screen (plus padding), whether it sits in a sheet
@@ -694,7 +718,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   // to point at (welcome, chapter cards, the end).
   const cardWidth = Math.min(CARD_MAX_W, viewport.w - CARD_SIDE * 2)
   const cardLeft = (viewport.w - cardWidth) / 2
-  const maxCardH = Math.round(viewport.h * 0.5)
+  const maxCardH = Math.round(viewport.h * 0.45)
   const cardH = Math.min(need, maxCardH)
   const bottomCardBottom = viewport.dock - CARD_SIDE
   const bottomCardTop = bottomCardBottom - cardH
@@ -724,14 +748,29 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   // there when it fits, else its top just under the top bar (a long list
   // shows its first rows). At most a couple of tries a step, so it can't
   // fight a page that won't scroll that far.
+  // In a form (the card on top), its top goes just under the card instead,
+  // so the form's first rows aren't hidden behind it.
   const autoScrolls = useRef(0)
   useEffect(() => {
-    if (!ready || !spot || mode !== "bottom" || spot.fixed || !viewport.h || autoScrolls.current >= 2) return
-    if (spot.top >= roomTop && spot.top + spot.height <= roomBottom) return
-    if (Math.abs(scrollWanted) < 4) return
-    autoScrolls.current += 1
-    window.scrollBy({ top: scrollWanted, behavior: "smooth" })
-  }, [ready, spot, mode, roomTop, roomBottom, scrollWanted, viewport.h])
+    if (!ready || !spot || spot.fixed || !viewport.h || autoScrolls.current >= 2) return
+    if (mode === "bottom") {
+      if (spot.top >= roomTop && spot.top + spot.height <= roomBottom) return
+      if (Math.abs(scrollWanted) < 4) return
+      autoScrolls.current += 1
+      scrollBy(null, scrollWanted, true)
+    } else if (mode === "top" && spot.inSheet && target.current) {
+      const wanted = spot.top - (topCardBottom + GAP)
+      if (wanted >= -4) return
+      autoScrolls.current += 1
+      scrollBy(scrollerOf(target.current), wanted, true)
+    }
+  }, [ready, spot, mode, roomTop, roomBottom, scrollWanted, topCardBottom, viewport.h])
+
+  // The tour keeps taps off the page, but a drag (or the mouse wheel)
+  // still scrolls whatever is underneath -- so the rest of an example form
+  // or list can be read past the card.
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ y: number; scroller: HTMLElement | null } | null>(null)
 
   let cardStyle: CSSProperties
   if (mode === "bottom") cardStyle = { left: cardLeft, width: cardWidth, bottom: viewport.h - bottomCardBottom, maxHeight: maxCardH }
@@ -775,9 +814,27 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[60] font-sans" role="dialog" aria-modal="true" aria-label="Admin tour">
-        {/* Swallows taps on the page underneath while the tour is open. */}
-        <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
+      <div ref={overlayRef} className="fixed inset-0 z-[60] font-sans" role="dialog" aria-modal="true" aria-label="Admin tour">
+        {/* Swallows taps on the page underneath while the tour is open,
+            but passes drags and the wheel on as scrolling. */}
+        <div
+          className="absolute inset-0 touch-none"
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={(e) => {
+            const t = e.touches[0]
+            drag.current = { y: t.clientY, scroller: scrollerAt(t.clientX, t.clientY, overlayRef.current) }
+          }}
+          onTouchMove={(e) => {
+            if (!drag.current) return
+            const y = e.touches[0].clientY
+            scrollBy(drag.current.scroller, drag.current.y - y)
+            drag.current.y = y
+          }}
+          onTouchEnd={() => {
+            drag.current = null
+          }}
+          onWheel={(e) => scrollBy(scrollerAt(e.clientX, e.clientY, overlayRef.current), e.deltaY)}
+        />
 
         {ready && lit ? (
           <div
@@ -842,7 +899,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
 
             {/* Text scrolls in its own area if it ever has to; the buttons
                 sit in a fixed row underneath, always in view. */}
-            <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain px-5 pt-3.5">
+            <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain px-4 pt-2">
               <div className="flex items-center justify-between gap-3">
                 <p className="min-w-0 truncate text-[11px] font-mono uppercase tracking-[0.16em] text-gold">
                   {showMenu ? "Jump to" : eyebrow}
@@ -852,7 +909,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                   onClick={() => setShowMenu((v) => !v)}
                   aria-expanded={showMenu}
                   aria-label={showMenu ? "Close the tour menu" : "Tour menu"}
-                  className="-mr-2 shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-ink-soft hover:bg-paper-2 hover:text-ink transition-colors"
+                  className="-mr-2 shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-ink-soft hover:bg-paper-2 hover:text-ink transition-colors"
                 >
                   {showMenu ? (
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true">
@@ -911,51 +968,51 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                 <>
                   <h2
                     className={`font-display font-semibold leading-snug ${
-                      step.chapter && !via ? "mt-2 text-[26px]" : "mt-1 text-[19px]"
+                      step.chapter && !via ? "mt-1 text-[24px]" : "text-[17px]"
                     }`}
                   >
                     {via ? via.title : step.title}
                   </h2>
                   {caption && (
-                    <p className="mt-1.5 text-[15px] leading-relaxed text-ink-soft">
+                    <p className="mt-1 text-[14px] leading-normal text-ink-soft">
                       <Caption text={caption} />
                     </p>
                   )}
-                  {!via && step.notify && (
-                    <div className="mt-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setShowNotify((v) => !v)}
-                        aria-expanded={showNotify}
-                        className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-gold"
-                      >
-                        <span aria-hidden="true">🔔</span>
-                        Who gets notified
-                        <span aria-hidden="true" className={`text-[9px] transition-transform ${showNotify ? "rotate-90" : ""}`}>
-                          ▶
-                        </span>
-                      </button>
-                      {showNotify && (
-                        <p className="mt-1.5 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">{step.notify}</p>
-                      )}
-                    </div>
+                  {!via && step.notify && showNotify && (
+                    <p className="mt-2 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">
+                      <span aria-hidden="true">🔔 </span>
+                      {step.notify}
+                    </p>
                   )}
                 </>
               )}
             </div>
 
             {!showMenu && (
-              <div ref={footRef} className="shrink-0 flex items-center gap-3 px-5 pb-5 pt-4">
+              <div ref={footRef} className="shrink-0 flex items-center gap-2 px-4 pb-3.5 pt-3">
                 {index > 0 && (
                   <button
                     type="button"
                     onClick={() => go(index - 1)}
                     aria-label="Back"
-                    className="shrink-0 w-11 h-11 rounded-full border border-hairline flex items-center justify-center text-ink-soft hover:text-ink transition-colors"
+                    className="shrink-0 w-10 h-10 rounded-full border border-hairline flex items-center justify-center text-ink-soft hover:text-ink transition-colors"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
                       <path d="M15 18l-6-6 6-6" />
                     </svg>
+                  </button>
+                )}
+                {!via && step.notify && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNotify((v) => !v)}
+                    aria-expanded={showNotify}
+                    className={`shrink-0 h-10 px-3.5 rounded-full border flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${
+                      showNotify ? "border-gold bg-gold/15 text-ink" : "border-hairline text-ink-soft"
+                    }`}
+                  >
+                    <span aria-hidden="true">🔔</span>
+                    Notified
                   </button>
                 )}
                 {via ? (
@@ -963,7 +1020,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                     type="button"
                     onClick={tap}
                     disabled={tapping}
-                    className="ml-auto bg-gold text-paper px-7 h-11 rounded-full text-[15px] font-bold shadow-md"
+                    className="ml-auto bg-gold text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
                   >
                     Tap it
                   </button>
@@ -971,7 +1028,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                   <button
                     type="button"
                     onClick={() => go(isLast ? null : index + 1)}
-                    className="ml-auto bg-ink text-paper px-7 h-11 rounded-full text-[15px] font-bold shadow-md"
+                    className="ml-auto bg-ink text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
                   >
                     {primaryLabel}
                   </button>
