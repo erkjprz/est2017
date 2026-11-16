@@ -704,7 +704,10 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
 
         {ready && lit ? (
           <div
-            className={`absolute ring-2 ring-gold motion-safe:transition-all motion-safe:duration-300 ${
+            // Only the press animates. Position and size follow the page
+            // as it scrolls; animating them too made the spotlight trail
+            // behind its target and land late.
+            className={`absolute ring-2 ring-gold motion-safe:transition-[transform,scale,background-color] motion-safe:duration-300 ${
               via ? "ring-4 cursor-pointer" : "pointer-events-none"
             } ${tapping ? "bg-gold/30 motion-safe:scale-90" : ""}`}
             style={{
