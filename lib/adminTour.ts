@@ -2,77 +2,39 @@
 
 import { useEffect, useState } from "react"
 
-// The admin tour (app/components/admin/AdminTour.tsx) is a checklist of
-// short mini-tours ("Learn the ropes" on /admin). Each mini-tour -- a run
-// -- is a few steps; the checklist ticks it off once finished. Which runs
-// are done, and whether the checklist was hidden, are remembered per
-// device (localStorage). Help → Admin brings the checklist back.
+// The admin tour (app/components/admin/AdminTour.tsx) opens by itself the
+// first time someone opens /admin on this device (remembered per device,
+// in localStorage).
+// Help → Admin can replay it any time (startAdminTour).
 //
-// A run moves across pages, so the step it's on (and which run) lives in
-// sessionStorage and its host is mounted once in the root layout. Browser
-// storage can be missing or blocked; then the checklist simply shows
-// everything as not done yet.
-const DONE_KEY = "admin:tour-done"
-const HIDDEN_KEY = "admin:tour-hidden"
-const STEP_KEY = "admin:tour-step"
-const RUN_KEY = "admin:tour-run"
-// Fired whenever a run starts, moves or ends, or the checklist changes.
+// The tour moves across pages, so the step it's on lives in sessionStorage
+// and its host is mounted once in the root layout. Browser storage can be
+// missing or blocked; then the tour simply offers itself again next visit.
+const ADMIN_TOUR_SEEN_KEY = "admin:tour-seen"
+const ADMIN_TOUR_STEP_KEY = "admin:tour-step"
+// Fired whenever the tour starts, moves, or ends.
 export const ADMIN_TOUR_CHANGE_EVENT = "admin-tour:change"
 
-function changed() {
-  window.dispatchEvent(new Event(ADMIN_TOUR_CHANGE_EVENT))
-}
-
-export function getDoneRuns(): string[] {
+export function hasSeenAdminTour(): boolean {
   try {
-    const raw = localStorage.getItem(DONE_KEY)
-    const parsed: unknown = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : []
-  } catch {
-    return []
-  }
-}
-
-export function markRunDone(run: string) {
-  try {
-    const done = getDoneRuns()
-    if (!done.includes(run)) localStorage.setItem(DONE_KEY, JSON.stringify([...done, run]))
-  } catch {
-    // Nothing to do -- it just shows as not done yet.
-  }
-  changed()
-}
-
-export function isTourChecklistHidden(): boolean {
-  try {
-    return localStorage.getItem(HIDDEN_KEY) === "1"
+    return localStorage.getItem(ADMIN_TOUR_SEEN_KEY) === "1"
   } catch {
     return false
   }
 }
 
-export function setTourChecklistHidden(hidden: boolean) {
+function markAdminTourSeen() {
   try {
-    if (hidden) localStorage.setItem(HIDDEN_KEY, "1")
-    else localStorage.removeItem(HIDDEN_KEY)
+    localStorage.setItem(ADMIN_TOUR_SEEN_KEY, "1")
   } catch {
-    // Nothing to do -- it shows again next visit.
+    // Nothing to do -- the tour just offers itself again next time.
   }
-  changed()
 }
 
 export function getAdminTourStep(): number | null {
   try {
-    const raw = sessionStorage.getItem(STEP_KEY)
+    const raw = sessionStorage.getItem(ADMIN_TOUR_STEP_KEY)
     return raw === null ? null : Number(raw)
-  } catch {
-    return null
-  }
-}
-
-export function getAdminTourRun(): string | null {
-  try {
-    return sessionStorage.getItem(RUN_KEY)
   } catch {
     return null
   }
@@ -80,24 +42,12 @@ export function getAdminTourRun(): string | null {
 
 export function setAdminTourStep(step: number | null) {
   try {
-    if (step === null) {
-      sessionStorage.removeItem(STEP_KEY)
-      sessionStorage.removeItem(RUN_KEY)
-    } else sessionStorage.setItem(STEP_KEY, String(step))
+    if (step === null) sessionStorage.removeItem(ADMIN_TOUR_STEP_KEY)
+    else sessionStorage.setItem(ADMIN_TOUR_STEP_KEY, String(step))
   } catch {
-    // The run still goes on on this page; it just won't survive a reload.
+    // The tour still runs on this page; it just won't survive a reload.
   }
-  changed()
-}
-
-// Starts a run at its first step (the step's index in the tour's list).
-export function startAdminTourRun(run: string, firstStep: number) {
-  try {
-    sessionStorage.setItem(RUN_KEY, run)
-  } catch {
-    // As above.
-  }
-  setAdminTourStep(firstStep)
+  window.dispatchEvent(new Event(ADMIN_TOUR_CHANGE_EVENT))
 }
 
 // Whether the current step is still waiting for the admin to tap the
@@ -113,16 +63,23 @@ export function getAdminTourPhase() {
 export function setAdminTourPhase(next: "via" | "show") {
   if (next === phase) return
   phase = next
-  changed()
+  window.dispatchEvent(new Event(ADMIN_TOUR_CHANGE_EVENT))
 }
 
 export function isAdminTourActive(): boolean {
   return getAdminTourStep() !== null
 }
 
-// Whether a run is going, for pages that put example items in place while
-// it is (see TourExamples) -- so the spotlight has something real-looking
-// to land on when, say, nothing is waiting for approval.
+// Counts as seen as soon as it starts, so coming back to /admin mid-tour
+// (or skipping it) never starts it over.
+export function startAdminTour() {
+  markAdminTourSeen()
+  setAdminTourStep(0)
+}
+
+// Whether the tour is running, for pages that put example items in place
+// while it is (see TourExamples) -- so the spotlight has something real-
+// looking to land on when, say, nothing is waiting for approval.
 export function useAdminTourActive(): boolean {
   const [active, setActive] = useState(false)
   useEffect(() => {
