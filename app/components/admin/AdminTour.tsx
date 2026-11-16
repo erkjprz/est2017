@@ -348,7 +348,19 @@ function reveal(el: HTMLElement) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-type Spot = { top: number; left: number; width: number; height: number; radius: number; inSheet: boolean }
+// top/height: the lit area, cut to what's on screen between the top bar and
+// the bottom bar. fullTop/fullHeight: the target's whole extent, for
+// deciding how far to scroll.
+type Spot = {
+  top: number
+  left: number
+  width: number
+  height: number
+  fullTop: number
+  fullHeight: number
+  radius: number
+  inSheet: boolean
+}
 
 // The step the tour is on (null id when it isn't running), and whether
 // it's past the tap that leads to it -- for pages that show example items
@@ -448,6 +460,21 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         bottom: Math.max(r.bottom, e.bottom)
       }
     }
+    const full = { top: r.top, bottom: r.bottom }
+    const inSheet = !!el.closest("[data-sheet]")
+    // A long list on a page runs under the top bar and the bottom bar (or
+    // off screen): light only the part that's actually visible between
+    // them, so those bars stay dimmed. Targets in a sheet or in the bars
+    // themselves are left as they are.
+    if (!inSheet && !el.closest("nav")) {
+      const header = document.querySelector("nav")
+      const dock = document.querySelector("nav.fixed")
+      const visibleTop = header ? header.getBoundingClientRect().bottom + PAD : 0
+      const visibleBottom = (dock && !dock.hasAttribute("hidden") ? dock.getBoundingClientRect().top : window.innerHeight) - PAD
+      if (r.bottom > visibleTop && r.top < visibleBottom) {
+        r = { ...r, top: Math.max(r.top, visibleTop), bottom: Math.min(r.bottom, visibleBottom) }
+      }
+    }
     const height = r.bottom - r.top
     const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8
     setSpot({
@@ -455,8 +482,10 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       left: r.left - PAD,
       width: r.right - r.left + PAD * 2,
       height: height + PAD * 2,
+      fullTop: full.top - PAD,
+      fullHeight: full.bottom - full.top + PAD * 2,
       radius: radius >= height / 2 ? 9999 : radius + PAD,
-      inSheet: !!el.closest("[data-sheet]")
+      inSheet
     })
   }, [])
 
@@ -578,9 +607,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   }, [ready, !!spot, measure])
 
   // When the caption can't fit beside the spotlight where the page happens
-  // to be scrolled, but both would fit on screen together, scroll the page
-  // so the spotlight sits just under the header with the caption below it
-  // -- instead of pinning the caption over part of the spotlight. Not for
+  // to be scrolled, scroll the page to make room -- instead of pinning the
+  // caption over part of the spotlight (see the two cases below). Not for
   // targets in a sheet (the page behind doesn't move them), and at most a
   // couple of tries per step so it can't fight a page that won't scroll.
   const autoScrolls = useRef(0)
@@ -594,8 +622,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     const header = document.querySelector("nav")
     const topLimit = Math.max(viewport.top, (header?.getBoundingClientRect().bottom ?? 0) + 8)
     const available = viewport.h - viewport.bottom - topLimit
-    if (spot.height + g + need > available) return
-    const delta = spot.top - topLimit
+    // Whole target and caption fit: target just under the top bar, caption
+    // below. Too tall for that (a long list): caption on top, and the list
+    // starts under it -- its first rows lit, the rest cut off at the bottom
+    // bar.
+    const delta =
+      spot.fullHeight + g + need <= available ? spot.fullTop - topLimit : spot.fullTop - (topLimit + need + g)
     if (Math.abs(delta) < 4) return
     autoScrolls.current += 1
     window.scrollBy({ top: delta, behavior: "smooth" })
@@ -608,6 +640,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   // Room for the pointing hand between a control to tap and its caption.
   const gap = via ? HAND_GAP : GAP
   let cardStyle: CSSProperties
+  // The lit area as drawn: the spot, cut back where a caption pinned over
+  // it would cover it (page targets only -- a form keeps its full outline).
+  let lit = spot
   if (spot && viewport.w) {
     const centre = spot.left + spot.width / 2
     const left = Math.min(Math.max(centre - cardWidth / 2, MARGIN), viewport.w - cardWidth - MARGIN)
@@ -629,11 +664,18 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       // scrolling, while leaving the far end of the screen (a form's
       // Approve button) in view.
       const pinTop = spot.inSheet || spot.top + spot.height / 2 > viewport.h / 2
+      const maxHeight = Math.min(viewport.h - viewport.top - viewport.bottom, Math.max(viewport.h * 0.62, 380))
       cardStyle = {
         left: (viewport.w - cardWidth) / 2,
         ...(pinTop ? { top: viewport.top } : { bottom: viewport.bottom }),
         width: cardWidth,
-        maxHeight: Math.min(viewport.h - viewport.top - viewport.bottom, Math.max(viewport.h * 0.62, 380))
+        maxHeight
+      }
+      if (!spot.inSheet) {
+        const cardH = Math.min(need, maxHeight)
+        const top = pinTop ? Math.max(spot.top, viewport.top + cardH + GAP) : spot.top
+        const bottom = pinTop ? spot.top + spot.height : Math.min(spot.top + spot.height, viewport.h - viewport.bottom - cardH - GAP)
+        if (bottom - top > 24) lit = { ...spot, top, height: bottom - top }
       }
     }
   } else {
@@ -660,17 +702,17 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         {/* Swallows taps on the page underneath while the tour is open. */}
         <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
 
-        {ready && spot ? (
+        {ready && lit ? (
           <div
             className={`absolute ring-2 ring-gold motion-safe:transition-all motion-safe:duration-300 ${
               via ? "ring-4 cursor-pointer" : "pointer-events-none"
             } ${tapping ? "bg-gold/30 motion-safe:scale-90" : ""}`}
             style={{
-              top: spot.top,
-              left: spot.left,
-              width: spot.width,
-              height: spot.height,
-              borderRadius: spot.radius,
+              top: lit.top,
+              left: lit.left,
+              width: lit.width,
+              height: lit.height,
+              borderRadius: lit.radius,
               // Gold glow around the cut-out, then the dim over the rest
               // of the page -- the glow is what makes it read as lit when
               // the control itself is dark (dark mode, the + button).
@@ -684,7 +726,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
             {via && !tapping && (
               <span
                 className="absolute inset-0 ring-4 ring-gold motion-safe:animate-ping pointer-events-none"
-                style={{ borderRadius: spot.radius }}
+                style={{ borderRadius: lit.radius }}
               />
             )}
           </div>
