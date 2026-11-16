@@ -100,7 +100,7 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-confirmed", "queue-decision", "queue-count"],
     title: "When something comes in",
-    text: "Contributions and loan payments are money already in the bank, so they only need confirming. When there’s more than one, you can bulk approve. [Reject] is one at a time. Red labels flag something to look at twice.",
+    text: "Money already in the bank only needs confirming. Approve several at once, [Reject] one at a time. Red labels mean look twice.",
     topic: "Approving money in"
   },
   {
@@ -110,7 +110,7 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Let's open a contribution to review.", optional: true }],
     title: "Contribution",
-    text: "Check the amount, date and bank against the bank app and the member's receipt below. Above [Approve] you'll see the balance movements.",
+    text: "Check the amount, date and bank against your bank app and the receipt, then [Approve].",
     notify: "Approving sends the member “Contribution Approved”. Rejecting sends “Contribution Not Approved” with your reason."
   },
   {
@@ -120,7 +120,7 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Now a loan payment to review.", optional: true }],
     title: "Loan payment",
-    text: "The line at the top shows what's left on the loan. Check the amount against the bank and the member's receipt, then [Approve]. It comes off what's owed.",
+    text: "Check the amount against the bank and receipt, then [Approve]. It comes off what's left on the loan.",
     notify: "The member gets “Loan Payment Approved”, and payment reminders for that due date stop."
   },
   {
@@ -139,7 +139,7 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Let's open a withdrawal to review.", optional: true }],
     title: "Withdrawal",
-    text: "Check the amount against what's available at the top. Send it to the account under Send to, then pick the bank it left from and attach the transfer screenshot. [Approve] once both are in.",
+    text: "Send it to the account under Send to, then add the bank it left from and the transfer screenshot.",
     notify: "The member gets “Withdrawal Approved”."
   },
   {
@@ -248,7 +248,7 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=loans",
     targets: ["example-split"],
     title: "How a loan's gain is shared",
-    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund.",
+    text: "Nothing to do beyond closing it. Its interest is split by what each member had in the fund that day, borrowers included.",
     notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
   },
   {
@@ -257,7 +257,7 @@ const STEPS: Step[] = [
     targets: ["example-split"],
     via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab", hint: "Let's look at investments." }],
     title: "When an investment makes or loses money",
-    text: "Open it and tap [Review & distribute]. The gain or loss is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
+    text: "Open it and tap [Review & distribute]. It's split by what each member had in the fund on the date you pick.",
     notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”.",
     topic: "Investments"
   },
@@ -275,7 +275,7 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=banks",
     targets: ["example-split"],
     title: "How bank interest is shared",
-    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with [Shares in gains] turned off get none.",
+    text: "Nothing to do here. Shares follow what each member had in the fund on Dec 31. Borrowers and anyone with [Shares in gains] off get none.",
     notify: "When you confirm, each member gets “Bank Interest Distributed”."
   },
   {
@@ -322,7 +322,7 @@ const STEPS: Step[] = [
     path: "/admin/lending",
     targets: ["lending-holds"],
     title: "Member holds",
-    text: "When a loan goes out, each member's share of it is on hold until it's repaid. The same goes for money in investments. Money on hold can't be withdrawn. The Member hold limit warns when a loan would tie up too much of anyone's money."
+    text: "Each member's share of a loan or investment is on hold, and can't be withdrawn, until it's back. The limit warns before a loan ties up too much."
   },
   {
     id: "done",
@@ -352,7 +352,8 @@ const MENU = TOPICS.reduce<{ chapter: string | null; topics: typeof TOPICS }[]>(
 const PAD = 6
 // The card's height before it's first measured.
 const MIN_CARD_ROOM = 200
-const GAP = 12
+// Space between the spotlight and the caption card.
+const GAP = 22
 const HAND_GAP = 52
 const MARGIN = 16
 // The caption card: widest it gets, its side gap, its progress bar.
