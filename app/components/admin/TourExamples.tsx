@@ -127,13 +127,22 @@ export function ExampleQueueSection() {
         </div>
       </section>
       <section data-tour="queue-decision">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-semibold">Needs a decision</span>
-          <ExampleBadge />
+        {/* data-tour="queue-decision-top": the heading and first item, which
+            is all the "When money goes out" step lights up -- the whole list
+            is taller than a phone can show with the caption, and each item
+            gets its own form step next. */}
+        <div data-tour="queue-decision-top">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-semibold">Needs a decision</span>
+            <ExampleBadge />
+          </div>
+          <p className="mt-1 text-xs text-ink-soft">Money going out needs a bank and proof of transfer.</p>
+          <div className="mt-2">
+            <ExampleTxnCard t={NEEDS_DECISION[0]} action="Review →" />
+          </div>
         </div>
-        <p className="mt-1 text-xs text-ink-soft">Money going out needs a bank and proof of transfer.</p>
         <div className="mt-2 space-y-2">
-          {NEEDS_DECISION.map((t) => (
+          {NEEDS_DECISION.slice(1).map((t) => (
             <ExampleTxnCard key={t.key} t={t} action="Review →" />
           ))}
         </div>

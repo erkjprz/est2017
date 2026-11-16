@@ -92,7 +92,7 @@ const STEPS: Step[] = [
   {
     id: "review-out",
     path: "/admin",
-    targets: ["queue-decision", "queue-confirmed", "queue-count"],
+    targets: ["queue-decision-top", "queue-decision", "queue-confirmed", "queue-count"],
     title: "When money goes out",
     text: "Withdrawals, loan releases and investment returns are reviewed one at a time. For withdrawals and loans, you send the money yourself before approving.",
     topic: "Approving money out",
