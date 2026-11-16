@@ -61,9 +61,24 @@ const NEEDS_DECISION: ExampleTxn[] = [
   { key: "investment-return", name: "Fund", arrow: "↑", tone: "in", line: "Investment Return · Rice trading", amount: "₱3,600.00" }
 ]
 
-function ExampleTxnCard({ t, action }: { t: ExampleTxn; action: string }) {
+// The tick box the real queue shows on each Confirmed money item, and next
+// to its heading for all of them, once there's more than one.
+function Tick({ checked }: { checked: boolean }) {
+  return (
+    <span
+      className={`w-[18px] h-[18px] shrink-0 rounded-[4px] border flex items-center justify-center text-[11px] leading-none ${
+        checked ? "bg-ink border-ink text-paper" : "border-hairline"
+      }`}
+    >
+      {checked ? "✓" : ""}
+    </span>
+  )
+}
+
+function ExampleTxnCard({ t, action, ticked }: { t: ExampleTxn; action: string; ticked?: boolean }) {
   return (
     <div data-tour={`example-${t.key}`} className="card overflow-hidden flex items-center gap-3 px-4 py-3">
+      {ticked !== undefined && <Tick checked={ticked} />}
       <FlowBadge arrow={t.arrow} tone={t.tone} small />
       <span className="min-w-0 flex-1">
         <span className="block font-display font-medium truncate text-sm">{t.name}</span>
@@ -89,14 +104,26 @@ export function ExampleQueueSection() {
     <div aria-hidden="true" className="space-y-8">
       <section data-tour="queue-confirmed">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-semibold">Confirmed money</span>
+          <span className="flex items-center gap-2.5 text-sm font-semibold">
+            <Tick checked />
+            Confirmed money
+          </span>
           <ExampleBadge />
         </div>
         <p className="mt-1 text-xs text-ink-soft">Already in the bank — just confirm.</p>
         <div className="mt-2 space-y-2">
           {CONFIRMED.map((t) => (
-            <ExampleTxnCard key={t.key} t={t} action="Reject" />
+            <ExampleTxnCard key={t.key} t={t} action="Reject" ticked />
           ))}
+        </div>
+        {/* Stands in for the real Approve bar that appears at the bottom of
+            the screen once items are ticked. */}
+        <div className="mt-2 card flex items-center gap-3 px-4 py-2.5">
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs text-ink-soft">2 selected</span>
+            <span className="block font-mono text-sm font-semibold text-sage">+₱3,150.00</span>
+          </span>
+          <span className="shrink-0 bg-ink text-paper px-5 py-2 rounded-full text-sm font-bold">Approve</span>
         </div>
       </section>
       <section data-tour="queue-decision">
