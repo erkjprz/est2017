@@ -197,13 +197,15 @@ const STEPS: Step[] = [
   {
     id: "interest-monthly",
     path: "/dashboard",
-    targets: ["type-bank_interest"],
+    targets: ["tx-details"],
+    alsoShow: ["tx-receipts"],
     via: [
       { path: "/dashboard", target: "new-fab", title: "Tap +" },
-      { target: "tx-type", title: "Tap Type" }
+      { target: "tx-type", title: "Tap Type" },
+      { target: "type-bank_interest", title: "Tap Bank Interest" }
     ],
     title: "When a bank credits interest",
-    text: "Pick [Bank Interest], choose the bank and attach a screenshot of the statement.",
+    text: "Enter the amount, choose the bank and attach a screenshot of the statement, then [Submit].",
     topic: "Bank interest"
   },
   {
