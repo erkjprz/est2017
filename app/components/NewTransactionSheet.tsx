@@ -1030,7 +1030,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
               <>
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Details</p>
-                  <div className="card divide-y divide-hairline overflow-hidden">
+                  <div data-tour="tx-details" className="card divide-y divide-hairline overflow-hidden">
                     {typeField}
 
                     {onBehalfOfField}
@@ -1159,7 +1159,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
                 </div>
 
                 {needsReceipt && (
-                  <div>
+                  <div data-tour="tx-receipts">
                     <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Receipts</p>
                     <ReceiptsField
                       files={receipts}
