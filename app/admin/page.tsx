@@ -264,7 +264,7 @@ export default function AdminPage() {
   // queue gets example items so the spotlight has something to land on
   // (see TourExamples).
   const { id: tourStepId, showing: tourStepShowing } = useAdminTourStep()
-  const tourExamples = tourStepId !== null && ["review-", "form-", "signup", "fix", "export"].some((p) => tourStepId.startsWith(p))
+  const tourExamples = tourStepId !== null && ["review-", "form-", "signup"].some((p) => tourStepId.startsWith(p))
   useEffect(() => {
     if (tourDecided.current || checkingAccess || member?.role !== "admin") return
     tourDecided.current = true
