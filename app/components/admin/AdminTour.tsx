@@ -27,19 +27,16 @@ import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourPhase, getAdminTourStep, setAdminT
 // extra line under the title, when the title alone isn't enough.
 type Via = { path?: string; target: string; title: string; hint?: string; optional?: boolean }
 
-// Captions name the app's buttons and labels in [brackets]; they show as a
-// small button-style label, without the brackets.
+// Captions name the app's buttons and labels in [brackets]; they show in
+// bold, without the brackets.
 function Caption({ text }: { text: string }) {
   return (
     <>
       {text.split(/(\[[^\]]+\])/).map((part, i) =>
         part.startsWith("[") && part.endsWith("]") ? (
-          <span
-            key={i}
-            className="inline-block rounded-md border border-hairline bg-paper-2 px-1.5 py-px text-[0.92em] font-semibold text-ink leading-snug"
-          >
+          <b key={i} className="font-semibold text-ink">
             {part.slice(1, -1)}
-          </span>
+          </b>
         ) : (
           part
         )
@@ -76,7 +73,7 @@ const STEPS: Step[] = [
     id: "welcome",
     path: "/admin",
     title: "Welcome, admin",
-    text: "Here's how things flow once you're an admin. Your approval moves the money. Tap [⋯] any time to jump to a subject.",
+    text: "Here's how things flow once you're an admin. Your approval moves the money. Tap the step count any time to jump to a subject.",
     topic: "Welcome"
   },
   {
@@ -353,12 +350,10 @@ const PAD = 6
 // The card's height before it's first measured.
 const MIN_CARD_ROOM = 200
 const GAP = 12
-const HAND_GAP = 52
 const MARGIN = 16
-// The caption card: widest it gets, its side gap, its progress bar.
+// The caption card: widest it gets, its side gap.
 const CARD_MAX_W = 440
 const CARD_SIDE = 12
-const PROGRESS_H = 3
 
 // The phone's safe-area insets (status bar, home indicator). The installed
 // app draws under the iOS status bar, so a caption at the very top of the
@@ -542,9 +537,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const footRef = useRef<HTMLDivElement>(null)
   const [need, setNeed] = useState(MIN_CARD_ROOM)
   useLayoutEffect(() => {
-    const natural = (bodyRef.current?.scrollHeight ?? 0) + (footRef.current?.offsetHeight ?? 0) + PROGRESS_H
-    if (natural > PROGRESS_H && Math.abs(natural - need) > 1) setNeed(natural)
+    const natural = (bodyRef.current?.scrollHeight ?? 0) + (footRef.current?.offsetHeight ?? 0)
+    if (natural > 0 && Math.abs(natural - need) > 1) setNeed(natural)
   }, [need, ready, via, showMenu, showNotify, viewport.w])
+
+  // Swipe the card right to go back, down to end the tour.
+  const swipe = useRef<{ x: number; y: number } | null>(null)
 
   const measure = useCallback(() => {
     const insets = safeInsets()
@@ -691,10 +689,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") go(null)
+      else if (e.key === "ArrowLeft" && index > 0) go(index - 1)
+      else if (e.key === "ArrowRight" && !via) go(index === STEPS.length - 1 ? null : index + 1)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [go])
+  }, [go, index, via])
 
   // Keep the spotlight on the target while the page settles (smooth
   // scroll, images and late data shifting things around).
@@ -723,7 +723,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const bottomCardBottom = viewport.dock - CARD_SIDE
   const bottomCardTop = bottomCardBottom - cardH
   const topCardBottom = viewport.top + cardH
-  const handRoom = via ? HAND_GAP : GAP
+  const handRoom = GAP
   // The page between the top bar and the docked card: where a page target
   // is scrolled to -- centred there when it fits, else its top just under
   // the top bar (a long list shows its first rows).
@@ -813,25 +813,15 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     if (bottom - top > 24) lit = { ...spot, top, height: bottom - top }
   }
 
-  // A dark page barely changes under a light dim, so dark mode dims harder
-  // for the spotlight to stand out. (The overlay only renders client-side,
-  // after the theme class is on <html>.)
-  const dim = document.documentElement.classList.contains("dark") ? "rgba(0, 0, 0, 0.72)" : "rgba(0, 0, 0, 0.45)"
+  // A light dim, so the page still reads as the app around what's lit.
+  // A form (in a sheet) isn't dimmed or outlined at all: the whole form is
+  // what the step is about. (The overlay only renders client-side, after
+  // the theme class is on <html>.)
+  const dim = document.documentElement.classList.contains("dark") ? "rgba(0, 0, 0, 0.5)" : "rgba(0, 0, 0, 0.3)"
+  const plainForm = !via && !!spot?.inSheet
 
-  // The pointing hand goes on whichever side of the control has more room
-  // (away from the card).
-  const handAbove =
-    mode === "above" ||
-    (mode !== "below" &&
-      !!spot &&
-    (mode === "bottom" ? bottomCardTop : viewport.h) - (spot.top + spot.height) <
-      spot.top - (mode === "top" ? topCardBottom : viewport.header))
-
-  const chapterIndex = CHAPTERS.findIndex((c) => c.index === index)
-  const eyebrow = step.chapter ? `Chapter ${chapterIndex + 1} of ${CHAPTERS.length}` : isLast ? "All done" : topicOf(index)
   const caption = via ? via.hint : step.text
-  const primaryLabel = index === 0 ? "Start" : isLast ? "Done" : step.chapter ? "Let's go" : "Next"
-  const progress = ((index + 1) / STEPS.length) * 100
+  const big = !!step.chapter || !step.targets
 
   return (
     <Portal>
@@ -857,102 +847,77 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           onWheel={(e) => scrollBy(scrollerAt(e.clientX, e.clientY, overlayRef.current), e.deltaY)}
         />
 
-        {ready && lit ? (
+        {ready && lit && plainForm ? null : ready && lit ? (
           <div
             // Only the press animates. Position and size follow the page
             // as it scrolls; animating them too made the spotlight trail
             // behind its target and land late.
-            className={`absolute ring-2 ring-gold motion-safe:transition-[transform,scale,background-color] motion-safe:duration-300 ${
-              via ? "ring-4 cursor-pointer" : "pointer-events-none"
-            } ${tapping ? "bg-gold/30 motion-safe:scale-90" : ""}`}
+            className={`absolute motion-safe:transition-[transform,scale,background-color] motion-safe:duration-300 ${
+              via ? "cursor-pointer" : "pointer-events-none"
+            } ${tapping ? "bg-gold/25 motion-safe:scale-95" : ""}`}
             style={{
               top: lit.top,
               left: lit.left,
               width: lit.width,
               height: lit.height,
               borderRadius: lit.radius,
-              // Gold glow around the cut-out, then the dim over the rest
-              // of the page -- the glow is what makes it read as lit when
-              // the control itself is dark (dark mode, the + button).
-              boxShadow: `0 0 18px 4px color-mix(in srgb, var(--gold) ${via ? 85 : 60}%, transparent), 0 0 0 9999px ${dim}`
+              // A thin outline, then the dim over the rest of the page.
+              boxShadow: `0 0 0 1.5px color-mix(in srgb, var(--gold) 75%, transparent), 0 0 0 9999px ${dim}`
             }}
             // Tapping the highlighted control itself carries on the tour.
             onClick={via ? tap : undefined}
             role={via ? "button" : undefined}
             aria-label={via ? via.title : undefined}
           >
+            {/* What to tap: a small pulsing dot in its corner. */}
             {via && !tapping && (
-              <span
-                className="absolute inset-0 ring-4 ring-gold motion-safe:animate-ping pointer-events-none"
-                style={{ borderRadius: lit.radius }}
-              />
+              <span aria-hidden="true" className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-gold pointer-events-none">
+                <span className="absolute -inset-1 rounded-full border-[1.5px] border-gold motion-safe:animate-ping" />
+              </span>
             )}
           </div>
         ) : (
           <div className="absolute inset-0 pointer-events-none" style={{ background: dim }} />
         )}
 
-        {/* Pointing hand on the control to tap, on its side away from the
-            card. */}
-        {ready && spot && via && !tapping && (
-          <span
-            aria-hidden="true"
-            className="absolute pointer-events-none text-3xl leading-none drop-shadow-lg motion-safe:animate-bounce"
-            style={
-              handAbove
-                ? { left: spot.left + spot.width / 2 - 15, top: spot.top - 42 }
-                : { left: spot.left + spot.width / 2 - 15, top: spot.top + spot.height + 6 }
-            }
-          >
-            {handAbove ? "👇" : "👆"}
-          </span>
-        )}
-
         {ready && (
           <div
-            className="absolute flex flex-col overflow-hidden rounded-3xl border border-hairline dark:border-white/15 bg-paper text-ink shadow-2xl"
+            className="absolute flex flex-col overflow-hidden rounded-2xl border border-hairline dark:border-white/10 bg-paper text-ink shadow-xl"
             style={cardStyle}
+            onTouchStart={(e) => {
+              const t = e.touches[0]
+              swipe.current = { x: t.clientX, y: t.clientY }
+            }}
+            onTouchEnd={(e) => {
+              const start = swipe.current
+              swipe.current = null
+              if (!start || showMenu) return
+              const t = e.changedTouches[0]
+              const dx = t.clientX - start.x
+              const dy = t.clientY - start.y
+              if (dx > 60 && Math.abs(dy) < 50 && index > 0) go(index - 1)
+              else if (dy > 70 && Math.abs(dx) < 50) go(null)
+            }}
           >
-            {/* How far through the tour. */}
-            <div className="shrink-0 bg-hairline/70" style={{ height: PROGRESS_H }}>
-              <div className="h-full bg-gold motion-safe:transition-[width] motion-safe:duration-500" style={{ width: `${progress}%` }} />
-            </div>
-
-            {/* Text scrolls in its own area if it ever has to; the buttons
-                sit in a fixed row underneath, always in view. */}
-            <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain px-4 pt-2">
-              <div className="flex items-center justify-between gap-3">
-                <p className="min-w-0 truncate text-[11px] font-mono uppercase tracking-[0.16em] text-gold">
-                  {showMenu ? "Jump to" : eyebrow}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowMenu((v) => !v)}
-                  aria-expanded={showMenu}
-                  aria-label={showMenu ? "Close the tour menu" : "Tour menu"}
-                  className="-mr-2 shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-ink-soft hover:bg-paper-2 hover:text-ink transition-colors"
-                >
-                  {showMenu ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true">
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
-                      <circle cx="5" cy="12" r="1.8" />
-                      <circle cx="12" cy="12" r="1.8" />
-                      <circle cx="19" cy="12" r="1.8" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-
+            <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain">
               {showMenu ? (
-                <div className="pb-4">
+                <div className="px-4 pt-2 pb-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[13px] font-semibold text-ink-soft">Jump to</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowMenu(false)}
+                      aria-label="Close the list"
+                      className="-mr-2 w-8 h-8 rounded-full flex items-center justify-center text-ink-soft hover:text-ink"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                  </div>
                   {MENU.map((group) => (
-                    <div key={group.chapter ?? "start"} className="mt-2">
-                      {group.chapter && (
-                        <p className="px-1 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.16em] text-ink-soft">{group.chapter}</p>
-                      )}
+                    <div key={group.chapter ?? "start"} className="mt-1">
+                      {group.chapter && <p className="px-1 pt-2 pb-1 text-[12px] text-ink-soft">{group.chapter}</p>}
                       <ul>
                         {group.topics.map((t) => {
                           const current = topicOf(index) === t.name
@@ -964,12 +929,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                                   setShowMenu(false)
                                   if (t.index !== index) go(t.index)
                                 }}
-                                className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-left text-[15px] ${
-                                  current ? "bg-gold/15 font-semibold" : "hover:bg-paper-2"
-                                }`}
+                                className={`w-full px-3 py-2 rounded-xl text-left text-[15px] ${current ? "bg-paper-2 font-semibold" : "hover:bg-paper-2"}`}
                               >
-                                <span>{t.name}</span>
-                                {current && <span className="text-[11px] font-mono text-gold">Here</span>}
+                                {t.name}
                               </button>
                             </li>
                           )
@@ -986,76 +948,61 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                   </button>
                 </div>
               ) : (
-                <>
-                  <h2
-                    className={`font-display font-semibold leading-snug ${
-                      step.chapter && !via ? "mt-1 text-[24px]" : "text-[17px]"
-                    }`}
-                  >
-                    {via ? via.title : step.title}
-                  </h2>
-                  {caption && (
-                    <p className="mt-1 text-[14px] leading-normal text-ink-soft">
-                      <Caption text={caption} />
-                    </p>
-                  )}
-                  {!via && step.notify && showNotify && (
-                    <p className="mt-2 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">
-                      <span aria-hidden="true">🔔 </span>
-                      {step.notify}
-                    </p>
-                  )}
-                </>
+                <div className="flex items-center gap-3 pl-4 pr-3 py-3">
+                  <div className="flex-1 min-w-0">
+                    <h2 className={big ? "font-display text-[20px] font-semibold leading-snug" : "text-[15px] font-semibold leading-snug"}>
+                      {via ? via.title : step.title}
+                    </h2>
+                    {caption && (
+                      <p className="mt-0.5 text-[14px] leading-snug text-ink-soft">
+                        <Caption text={caption} />
+                        {!via && step.notify && !showNotify && (
+                          <>
+                            {" "}
+                            <button
+                              type="button"
+                              onClick={() => setShowNotify(true)}
+                              className="underline underline-offset-2 decoration-hairline hover:text-ink"
+                            >
+                              More
+                            </button>
+                          </>
+                        )}
+                      </p>
+                    )}
+                    {!via && step.notify && showNotify && (
+                      <p className="mt-1.5 text-[13px] leading-snug text-ink-soft">
+                        <span className="font-semibold text-ink">Notified: </span>
+                        {step.notify}
+                      </p>
+                    )}
+                  </div>
+                  <div className="shrink-0 flex flex-col items-center gap-1">
+                    {!via && (
+                      <button
+                        type="button"
+                        onClick={() => go(isLast ? null : index + 1)}
+                        aria-label={isLast ? "Finish the tour" : "Next"}
+                        className="w-10 h-10 rounded-full bg-ink text-paper flex items-center justify-center motion-safe:active:scale-95 transition-transform"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+                          {isLast ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M5 12h14M13 6l6 6-6 6" />}
+                        </svg>
+                      </button>
+                    )}
+                    {/* Also opens the list of subjects to jump to. */}
+                    <button
+                      type="button"
+                      onClick={() => setShowMenu(true)}
+                      aria-label={`Step ${index + 1} of ${STEPS.length}. Jump to a subject`}
+                      className="font-mono text-[10px] text-ink-soft px-1 rounded hover:text-ink"
+                    >
+                      {index + 1}/{STEPS.length}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
-
-            {!showMenu && (
-              <div ref={footRef} className="shrink-0 flex items-center gap-2 px-4 pb-3.5 pt-3">
-                {index > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => go(index - 1)}
-                    aria-label="Back"
-                    className="shrink-0 w-10 h-10 rounded-full border border-hairline flex items-center justify-center text-ink-soft hover:text-ink transition-colors"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
-                      <path d="M15 18l-6-6 6-6" />
-                    </svg>
-                  </button>
-                )}
-                {!via && step.notify && (
-                  <button
-                    type="button"
-                    onClick={() => setShowNotify((v) => !v)}
-                    aria-expanded={showNotify}
-                    className={`shrink-0 h-10 px-3.5 rounded-full border flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${
-                      showNotify ? "border-gold bg-gold/15 text-ink" : "border-hairline text-ink-soft"
-                    }`}
-                  >
-                    <span aria-hidden="true">🔔</span>
-                    Notified
-                  </button>
-                )}
-                {via ? (
-                  <button
-                    type="button"
-                    onClick={tap}
-                    disabled={tapping}
-                    className="ml-auto bg-gold text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
-                  >
-                    Tap it
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => go(isLast ? null : index + 1)}
-                    className="ml-auto bg-ink text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
-                  >
-                    {primaryLabel}
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>
