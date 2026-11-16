@@ -846,6 +846,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const eyebrow = step.chapter ? `Chapter ${chapterIndex + 1} of ${CHAPTERS.length}` : isLast ? "All done" : topicOf(index)
   const caption = via ? via.hint : step.text
   const primaryLabel = index === 0 ? "Start" : isLast ? "Done" : step.chapter ? "Let's go" : "Next"
+  const isChapter = !!step.chapter && !via
+  // What a chapter card lists: the subjects in it.
+  const chapterTopics = isChapter ? (MENU.find((g) => g.chapter === step.chapter)?.topics ?? []) : []
   const progress = ((index + 1) / STEPS.length) * 100
 
   return (
@@ -904,7 +907,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
             )}
           </div>
         ) : (
-          <div className="absolute inset-0 pointer-events-none" style={{ background: dim }} />
+          <div
+            // A chapter card covers the page completely: it's a title page
+            // for what comes next, not about whatever page is underneath.
+            className={`absolute inset-0 pointer-events-none ${isChapter ? "bg-background" : ""}`}
+            style={isChapter ? undefined : { background: dim }}
+          />
         )}
 
         {/* Pointing hand on the control to tap, on its side away from the
@@ -1003,16 +1011,24 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
               ) : (
                 <>
                   <h2
-                    className={`font-display font-semibold leading-snug ${
-                      step.chapter && !via ? "mt-1 text-[24px]" : "text-[17px]"
-                    }`}
+                    className={`font-display font-semibold leading-snug ${isChapter ? "mt-3 text-[32px] leading-tight" : "text-[17px]"}`}
                   >
                     {via ? via.title : step.title}
                   </h2>
                   {caption && (
-                    <p className="mt-1 text-[14px] leading-normal text-ink-soft">
+                    <p className={`mt-1 leading-normal text-ink-soft ${isChapter ? "text-[15px]" : "text-[14px]"}`}>
                       <Caption text={caption} />
                     </p>
+                  )}
+                  {isChapter && chapterTopics.length > 0 && (
+                    <ul className="mt-4 mb-1 border-t border-hairline">
+                      {chapterTopics.map((t) => (
+                        <li key={t.name} className="flex items-center gap-2.5 border-b border-hairline py-2.5 text-[15px]">
+                          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-gold" />
+                          {t.name}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                   {!via && step.notify && showNotify && (
                     <p className="mt-2 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">
