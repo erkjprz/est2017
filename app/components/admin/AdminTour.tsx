@@ -408,14 +408,15 @@ function findTarget(targets: string[] | undefined): HTMLElement | null {
 
 // Brings the target into view: centred, or for something taller than half
 // the screen, its top just under the sticky header so the caption still
-// has room below it.
+// has room below it. Instantly -- a smooth scroll made the spotlight glide
+// in late behind it.
 function reveal(el: HTMLElement) {
   const r = el.getBoundingClientRect()
   if (r.height > window.innerHeight * 0.45) {
     // Works inside a scrolling sheet too, unlike scrolling the window.
     el.style.scrollMarginTop = "72px"
-    el.scrollIntoView({ block: "start", behavior: "smooth" })
-  } else el.scrollIntoView({ block: "center", behavior: "smooth" })
+    el.scrollIntoView({ block: "start", behavior: "instant" })
+  } else el.scrollIntoView({ block: "center", behavior: "instant" })
 }
 
 // What scrolls at this point of the screen, looking past the tour's own
@@ -601,7 +602,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         const value = get()
         if (value) return value
         if (Date.now() - started > timeoutMs) return null
-        await sleep(150)
+        await sleep(50)
       }
       return null
     }
@@ -616,6 +617,16 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       target.current = el
       if (el) reveal(el)
       measure()
+      // A sheet slides up as it opens, which no scroll or resize event
+      // reports: follow the target every frame for a moment, so the
+      // spotlight moves with it instead of landing late.
+      const until = Date.now() + 700
+      const follow = () => {
+        if (cancelled || target.current !== el) return
+        measure()
+        if (Date.now() < until) requestAnimationFrame(follow)
+      }
+      if (el) requestAnimationFrame(follow)
     }
 
     async function run() {
@@ -624,8 +635,10 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         for (const v of step.via ?? []) {
           if (v.path) await ensurePage(v.path)
           // A page that's still loading (Admin's header icons wait for its
-          // queue) gets longer before the tap is skipped.
-          const el = await waitFor(() => findTarget([v.target]), v.optional ? 1500 : 10000)
+          // queue) gets longer before the tap is skipped. An optional one
+          // (an example card, hidden whenever the real queue has items) is
+          // given up on quickly -- the step shows its example form anyway.
+          const el = await waitFor(() => findTarget([v.target]), v.optional ? 400 : 10000)
           if (cancelled) return
           if (!el) break
           point(el)
@@ -638,7 +651,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           tapped.current = null
           if (cancelled) return
           setTapping(true)
-          await sleep(450)
+          await sleep(150)
           if (cancelled) return
           const clickable = el.matches("button, a") ? el : el.querySelector<HTMLElement>("button, a") ?? el
           clickable.click()
@@ -646,7 +659,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           setVia(null)
           setReady(false)
           point(null)
-          await sleep(400)
+          // Just long enough for the tap to take effect (a tab switching,
+          // a page starting to load) before looking for what's next.
+          await sleep(100)
         }
       }
 
@@ -774,12 +789,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       if (spot.top >= roomTop && spot.top + spot.height <= roomBottom) return
       if (Math.abs(scrollWanted) < 4) return
       autoScrolls.current += 1
-      scrollBy(null, scrollWanted, true)
+      scrollBy(null, scrollWanted)
     } else if (mode === "top" && spot.inSheet && target.current) {
       const wanted = spot.top - (topCardBottom + GAP)
       if (wanted >= -4) return
       autoScrolls.current += 1
-      scrollBy(scrollerOf(target.current), wanted, true)
+      scrollBy(scrollerOf(target.current), wanted)
     }
   }, [ready, spot, mode, roomTop, roomBottom, scrollWanted, topCardBottom, viewport.h])
 
