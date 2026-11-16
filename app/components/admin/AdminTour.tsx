@@ -92,7 +92,7 @@ const STEPS: Step[] = [
   {
     id: "review-out",
     path: "/admin",
-    targets: ["queue-decision", "queue-confirmed", "queue-count"],
+    targets: ["queue-decision-top", "queue-decision", "queue-confirmed", "queue-count"],
     title: "When money goes out",
     text: "Withdrawals, loan releases and investment returns are reviewed one at a time. For withdrawals and loans, you send the money yourself before approving.",
     topic: "Approving money out",
@@ -576,6 +576,30 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     // every move.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, !!spot, measure])
+
+  // When the caption can't fit beside the spotlight where the page happens
+  // to be scrolled, but both would fit on screen together, scroll the page
+  // so the spotlight sits just under the header with the caption below it
+  // -- instead of pinning the caption over part of the spotlight. Not for
+  // targets in a sheet (the page behind doesn't move them), and at most a
+  // couple of tries per step so it can't fight a page that won't scroll.
+  const autoScrolls = useRef(0)
+  useEffect(() => {
+    if (!ready || !spot || spot.inSheet || !viewport.h || autoScrolls.current >= 2) return
+    const g = via ? HAND_GAP : GAP
+    const roomBelow = viewport.h - (spot.top + spot.height) - g - viewport.bottom
+    const roomAbove = spot.top - g - viewport.top
+    if (roomBelow >= need || roomAbove >= need) return
+    // The sticky top bar covers the page under it.
+    const header = document.querySelector("nav")
+    const topLimit = Math.max(viewport.top, (header?.getBoundingClientRect().bottom ?? 0) + 8)
+    const available = viewport.h - viewport.bottom - topLimit
+    if (spot.height + g + need > available) return
+    const delta = spot.top - topLimit
+    if (Math.abs(delta) < 4) return
+    autoScrolls.current += 1
+    window.scrollBy({ top: delta, behavior: "smooth" })
+  }, [ready, spot, need, via, viewport])
 
   // The caption goes on whichever side of the spotlight has more room, and
   // scrolls inside itself if even that isn't enough. Centred when there's
