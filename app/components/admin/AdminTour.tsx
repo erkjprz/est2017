@@ -220,7 +220,7 @@ const STEPS: Step[] = [
     id: "chapter-sometimes",
     path: "",
     title: "Now and then",
-    text: "Fixing mistakes, closing loans, sharing investment gains and the year’s bank interest.",
+    text: "Fixing mistakes, recording for a member, closing loans, sharing investment gains and the year’s bank interest.",
     chapter: "Now and then"
   },
   {
@@ -230,6 +230,17 @@ const STEPS: Step[] = [
     title: "When something was recorded wrong",
     text: "Find it here, correct it, and let the member know what changed.",
     topic: "Fixing mistakes"
+  },
+  {
+    id: "on-behalf",
+    path: "/dashboard",
+    targets: ["tx-on-behalf"],
+    via: [
+      { path: "/dashboard", target: "new-fab", title: "Tap +", hint: "To record something for a member, start a new transaction." }
+    ],
+    title: "When you record it for a member",
+    text: "Pick who it's for here. Contributions and loan payments are approved right away. Withdrawals and loan requests still need approving.",
+    topic: "Recording for a member"
   },
   {
     id: "loans",
