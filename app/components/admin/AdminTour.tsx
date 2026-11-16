@@ -60,6 +60,10 @@ type Step = {
   text: string
   // Starts a topic in the caption's "Go to" list.
   topic?: string
+  // A chapter card: a short divider that opens a group of topics (Every
+  // day, Every month, ...). No page of its own -- it shows over whichever
+  // page the tour is on.
+  chapter?: string
   // The in-app notification this step leads to, and who gets it -- taken
   // from the database's notification triggers and the loan-payment-
   // reminders job, so keep it in step with them.
@@ -72,8 +76,15 @@ const STEPS: Step[] = [
     id: "welcome",
     path: "/admin",
     title: "Welcome, admin",
-    text: "Here's how things flow once you're an admin. Your approval moves the money. Tap [Topics] any time to jump to a subject.",
+    text: "Here's how things flow once you're an admin. Your approval moves the money. Tap [⋯] any time to jump to a subject.",
     topic: "Welcome"
+  },
+  {
+    id: "chapter-daily",
+    path: "",
+    title: "Every day",
+    text: "The approval queue: what lands in it, and how to clear it.",
+    chapter: "Every day"
   },
   {
     id: "queue",
@@ -81,7 +92,8 @@ const STEPS: Step[] = [
     targets: ["queue-count"],
     title: "Your approval queue",
     text: "Everything waiting for an admin lands here: money members send in, money they ask for, and new signups.",
-    notify: "You get “Pending Approval” when a member sends something in, and “New Signup” when someone signs up."
+    notify: "You get “Pending Approval” when a member sends something in, and “New Signup” when someone signs up.",
+    topic: "Your queue"
   },
   {
     id: "review-in",
@@ -117,8 +129,8 @@ const STEPS: Step[] = [
     targets: ["queue-decision-top", "queue-decision", "queue-confirmed", "queue-count"],
     title: "When money goes out",
     text: "Withdrawals, loan releases and investment returns are reviewed one at a time. For withdrawals and loans, send the money first, then [Approve].",
-    topic: "Approving money out",
-    notify: "After you reject something, the member can fix it and resend it, and you're notified again."
+    notify: "After you reject something, the member can fix it and resend it, and you're notified again.",
+    topic: "Approving money out"
   },
   {
     id: "form-withdrawal",
@@ -166,19 +178,110 @@ const STEPS: Step[] = [
     topic: "Signups"
   },
   {
-    id: "fix",
-    path: "/admin",
-    targets: ["search-fix"],
-    title: "When something was recorded wrong",
-    text: "Find it here, correct it, and let the member know what changed.",
-    topic: "Fixes and backups"
+    id: "messages",
+    path: "/messages",
+    targets: ["messages-list", "messages-title"],
+    via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon" }],
+    title: "When you or a member asks a question",
+    text: "It's a chat: members can message the admins, and you can message a member. Every conversation is here, and you reply right in the thread.",
+    notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”.",
+    topic: "Member questions"
+  },
+  {
+    id: "chapter-monthly",
+    path: "",
+    title: "Every month",
+    text: "Recording bank interest and keeping a backup.",
+    chapter: "Every month"
+  },
+  {
+    id: "interest-monthly",
+    path: "/dashboard",
+    targets: ["type-bank_interest"],
+    via: [
+      { path: "/dashboard", target: "new-fab", title: "Tap +" },
+      { target: "tx-type", title: "Tap Type" }
+    ],
+    title: "When a bank credits interest",
+    text: "Pick [Bank Interest], choose the bank and attach a screenshot of the statement.",
+    topic: "Bank interest"
   },
   {
     id: "export",
     path: "/admin",
     targets: ["export"],
     title: "At the end of each month",
-    text: "Download the full ledger here to keep a backup."
+    text: "Download the full ledger here to keep a backup.",
+    topic: "Backups"
+  },
+  {
+    id: "chapter-sometimes",
+    path: "",
+    title: "Now and then",
+    text: "Fixing mistakes, closing loans, sharing investment gains and the year’s bank interest.",
+    chapter: "Now and then"
+  },
+  {
+    id: "fix",
+    path: "/admin",
+    targets: ["search-fix"],
+    title: "When something was recorded wrong",
+    text: "Find it here, correct it, and let the member know what changed.",
+    topic: "Fixing mistakes"
+  },
+  {
+    id: "loans",
+    path: "/fund-breakdown?tab=loans",
+    targets: ["loans-attention", "loans-total"],
+    via: [
+      { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown" },
+      { target: "tab-loans", title: "Tap the Loans tab" }
+    ],
+    title: "When a loan is overdue or paid off",
+    text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared.",
+    topic: "Loans"
+  },
+  {
+    id: "loans-share",
+    path: "/fund-breakdown?tab=loans",
+    targets: ["example-split"],
+    title: "How a loan's gain is shared",
+    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund.",
+    notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
+  },
+  {
+    id: "investments-share",
+    path: "/fund-breakdown?tab=investments",
+    targets: ["example-split"],
+    via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab" }],
+    title: "When an investment makes or loses money",
+    text: "Open it and tap [Review & distribute]. The gain or loss is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
+    notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”.",
+    topic: "Investments"
+  },
+  {
+    id: "interest-yearly",
+    path: "/fund-breakdown?tab=banks",
+    targets: ["bank-interest-due", "bank-total"],
+    via: [{ path: "/fund-breakdown", target: "tab-banks", title: "Tap the Banks tab" }],
+    title: "At year end",
+    text: "Bank interest is shared out once a year. In January, once December's interest is in for every bank, last year's total shows up here. Open each bank and tap [Review & distribute].",
+    topic: "Year-end interest"
+  },
+  {
+    id: "interest-share",
+    path: "/fund-breakdown?tab=banks",
+    targets: ["example-split"],
+    title: "How bank interest is shared",
+    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with [Shares in gains] turned off get none.",
+    notify: "When you confirm, each member gets “Bank Interest Distributed”."
+  },
+  {
+    id: "chapter-settings",
+    path: "",
+    title: "Settings",
+    text: "Who’s in the fund, and how much it can lend.",
+    chapter: "Settings"
   },
   {
     id: "members",
@@ -220,74 +323,6 @@ const STEPS: Step[] = [
     text: "When a loan goes out, each member's share of it is on hold until it's repaid. The same goes for money in investments. Money on hold can't be withdrawn. The Member hold limit warns when a loan would tie up too much of anyone's money."
   },
   {
-    id: "messages",
-    path: "/messages",
-    targets: ["messages-list", "messages-title"],
-    via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon" }],
-    title: "When you or a member asks a question",
-    text: "It's a chat: members can message the admins, and you can message a member. Every conversation is here, and you reply right in the thread.",
-    topic: "Member questions",
-    notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”."
-  },
-  {
-    id: "interest-monthly",
-    path: "/dashboard",
-    targets: ["type-bank_interest"],
-    via: [
-      { path: "/dashboard", target: "new-fab", title: "Tap +" },
-      { target: "tx-type", title: "Tap Type" }
-    ],
-    title: "When a bank credits interest",
-    text: "Pick [Bank Interest], choose the bank and attach a screenshot of the statement.",
-    topic: "Bank interest"
-  },
-  {
-    id: "interest-yearly",
-    path: "/fund-breakdown?tab=banks",
-    targets: ["bank-interest-due", "bank-total"],
-    via: [
-      { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown" },
-      { target: "tab-banks", title: "Tap the Banks tab" }
-    ],
-    title: "At year end",
-    text: "Bank interest is shared out once a year. In January, once December's interest is in for every bank, last year's total shows up here. Open each bank and tap [Review & distribute]."
-  },
-  {
-    id: "interest-share",
-    path: "/fund-breakdown?tab=banks",
-    targets: ["example-split"],
-    title: "How bank interest is shared",
-    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with [Shares in gains] turned off get none.",
-    notify: "When you confirm, each member gets “Bank Interest Distributed”."
-  },
-  {
-    id: "loans",
-    path: "/fund-breakdown?tab=loans",
-    targets: ["loans-attention", "loans-total"],
-    via: [{ path: "/fund-breakdown", target: "tab-loans", title: "Tap the Loans tab" }],
-    title: "When a loan is overdue or paid off",
-    text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared.",
-    topic: "Loans"
-  },
-  {
-    id: "loans-share",
-    path: "/fund-breakdown?tab=loans",
-    targets: ["example-split"],
-    title: "How a loan's gain is shared",
-    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund.",
-    notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
-  },
-  {
-    id: "investments-share",
-    path: "/fund-breakdown?tab=investments",
-    targets: ["example-split"],
-    via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab" }],
-    title: "When an investment makes or loses money",
-    text: "Open it and tap [Review & distribute]. The gain or loss is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
-    topic: "Investments",
-    notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”."
-  },
-  {
     id: "done",
     path: "/admin",
     title: "You're all set",
@@ -302,13 +337,26 @@ function topicOf(index: number) {
   return [...TOPICS].reverse().find((t) => t.index <= index)?.name ?? null
 }
 
+// The chapter cards, and the ⋯ menu: topics grouped under their chapter.
+const CHAPTERS = STEPS.flatMap((step, index) => (step.chapter ? [{ name: step.chapter, index }] : []))
+const MENU = TOPICS.reduce<{ chapter: string | null; topics: typeof TOPICS }[]>((groups, topic) => {
+  const chapter = [...CHAPTERS].reverse().find((c) => c.index <= topic.index)?.name ?? null
+  const last = groups[groups.length - 1]
+  if (last && last.chapter === chapter) last.topics.push(topic)
+  else groups.push({ chapter, topics: [topic] })
+  return groups
+}, [])
+
 const PAD = 6
-// Least room beside the spotlight the caption needs, before it's pinned to
-// the bottom of the screen instead.
+// The card's height before it's first measured.
 const MIN_CARD_ROOM = 200
 const GAP = 12
 const HAND_GAP = 52
 const MARGIN = 16
+// The caption card: widest it gets, its side gap, its progress bar.
+const CARD_MAX_W = 440
+const CARD_SIDE = 12
+const PROGRESS_H = 3
 
 // The phone's safe-area insets (status bar, home indicator). The installed
 // app draws under the iOS status bar, so a caption at the very top of the
@@ -370,18 +418,24 @@ function reveal(el: HTMLElement) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// top/height: the lit area, cut to what's on screen between the top bar and
-// the bottom bar. fullTop/fullHeight: the target's whole extent, for
-// deciding how far to scroll.
+// The target's box on screen (plus padding), whether it sits in a sheet
+// (a review form) and whether it's fixed in place (the bottom bar, +,
+// Search & Fix) -- which scrolling the page can't move.
 type Spot = {
   top: number
   left: number
   width: number
   height: number
-  fullTop: number
-  fullHeight: number
   radius: number
   inSheet: boolean
+  fixed: boolean
+}
+
+function isFixed(el: HTMLElement) {
+  for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+    if (getComputedStyle(node).position === "fixed") return true
+  }
+  return false
 }
 
 // The step the tour is on (null id when it isn't running), and whether
@@ -438,8 +492,11 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const isLast = index === STEPS.length - 1
   const [ready, setReady] = useState(false)
   const [spot, setSpot] = useState<Spot | null>(null)
-  // The screen, and the edges a caption must stay inside of.
-  const [viewport, setViewport] = useState({ w: 0, h: 0, top: MARGIN, bottom: MARGIN })
+  // The screen: its size, the safe edges a card stays inside of (status
+  // bar, home indicator), where the sticky top bar ends and where the
+  // bottom bar starts.
+  // scrollRoom: how much further down the page can still scroll.
+  const [viewport, setViewport] = useState({ w: 0, h: 0, top: MARGIN, bottom: MARGIN, header: 0, dock: 0, scrollRoom: 0 })
   const target = useRef<HTMLElement | null>(null)
   // The step's alsoShow targets, while it's showing (not during a tap).
   const alsoShow = useRef<string[]>([])
@@ -449,23 +506,35 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const tapped = useRef<(() => void) | null>(null)
   const [tapping, setTapping] = useState(false)
   const tap = useCallback(() => tapped.current?.(), [])
-  // The caption's topic list, open in place of the step text.
-  const [showTopics, setShowTopics] = useState(false)
+  // The ⋯ menu (topics by chapter, End tour), open in place of the text.
+  const [showMenu, setShowMenu] = useState(false)
   // A step's notification note, folded into one line until tapped.
   const [showNotify, setShowNotify] = useState(false)
-  // The caption's natural height (text plus buttons), measured after each
-  // render, so it's only placed beside the spotlight where it fully fits.
+  // The card's natural height (text plus buttons), measured after each
+  // render, so the page can be scrolled to leave room for it.
   const bodyRef = useRef<HTMLDivElement>(null)
   const footRef = useRef<HTMLDivElement>(null)
   const [need, setNeed] = useState(MIN_CARD_ROOM)
   useLayoutEffect(() => {
-    const natural = (bodyRef.current?.scrollHeight ?? 0) + (footRef.current?.offsetHeight ?? 0)
-    if (natural > 0 && Math.abs(natural - need) > 1) setNeed(natural)
-  }, [need, ready, via, showTopics, showNotify, viewport.w])
+    const natural = (bodyRef.current?.scrollHeight ?? 0) + (footRef.current?.offsetHeight ?? 0) + PROGRESS_H
+    if (natural > PROGRESS_H && Math.abs(natural - need) > 1) setNeed(natural)
+  }, [need, ready, via, showMenu, showNotify, viewport.w])
 
   const measure = useCallback(() => {
     const insets = safeInsets()
-    setViewport({ w: window.innerWidth, h: window.innerHeight, top: insets.top + MARGIN, bottom: insets.bottom + MARGIN })
+    const h = window.innerHeight
+    const header = document.querySelector("nav")
+    const dock = document.querySelector("nav.fixed")
+    const dockRect = dock && !dock.hasAttribute("hidden") ? dock.getBoundingClientRect() : null
+    setViewport({
+      w: window.innerWidth,
+      h,
+      top: insets.top + MARGIN,
+      bottom: insets.bottom + MARGIN,
+      header: header ? header.getBoundingClientRect().bottom : 0,
+      dock: dockRect && dockRect.height > 0 ? dockRect.top : h - insets.bottom,
+      scrollRoom: Math.max(0, document.documentElement.scrollHeight - (window.scrollY + h))
+    })
     const el = target.current
     if (!el || !el.isConnected) {
       setSpot(null)
@@ -482,21 +551,6 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         bottom: Math.max(r.bottom, e.bottom)
       }
     }
-    const full = { top: r.top, bottom: r.bottom }
-    const inSheet = !!el.closest("[data-sheet]")
-    // A long list on a page runs under the top bar and the bottom bar (or
-    // off screen): light only the part that's actually visible between
-    // them, so those bars stay dimmed. Targets in a sheet or in the bars
-    // themselves are left as they are.
-    if (!inSheet && !el.closest("nav")) {
-      const header = document.querySelector("nav")
-      const dock = document.querySelector("nav.fixed")
-      const visibleTop = header ? header.getBoundingClientRect().bottom + PAD : 0
-      const visibleBottom = (dock && !dock.hasAttribute("hidden") ? dock.getBoundingClientRect().top : window.innerHeight) - PAD
-      if (r.bottom > visibleTop && r.top < visibleBottom) {
-        r = { ...r, top: Math.max(r.top, visibleTop), bottom: Math.min(r.bottom, visibleBottom) }
-      }
-    }
     const height = r.bottom - r.top
     const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 8
     setSpot({
@@ -504,10 +558,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       left: r.left - PAD,
       width: r.right - r.left + PAD * 2,
       height: height + PAD * 2,
-      fullTop: full.top - PAD,
-      fullHeight: full.bottom - full.top + PAD * 2,
       radius: radius >= height / 2 ? 9999 : radius + PAD,
-      inSheet
+      inSheet: !!el.closest("[data-sheet]"),
+      fixed: isFixed(el)
     })
   }, [])
 
@@ -574,7 +627,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       if (cancelled) return
       alsoShow.current = step.alsoShow ?? []
       setAdminTourPhase("show")
-      await ensurePage(step.path)
+      // A chapter card has no page of its own: it shows over whichever
+      // page the tour is on.
+      if (step.path) await ensurePage(step.path)
       if (!step.targets) {
         point(null)
         setReady(true)
@@ -628,86 +683,74 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, !!spot, measure])
 
-  // When the caption can't fit beside the spotlight where the page happens
-  // to be scrolled, scroll the page to make room -- instead of pinning the
-  // caption over part of the spotlight (see the two cases below). Not for
-  // targets in a sheet (the page behind doesn't move them), and at most a
-  // couple of tries per step so it can't fight a page that won't scroll.
+  // ---- Where the card sits ----
+  // "bottom": docked just above the bottom bar -- the usual place, so the
+  // card never jumps around. "top": under the status bar, when the bottom
+  // is taken: a review form fills it (its Approve button and balance must
+  // stay in view), or the thing to tap is fixed down there (+, Search &
+  // Fix) and can't be scrolled out from under the card. "center": nothing
+  // to point at (welcome, chapter cards, the end).
+  const cardWidth = Math.min(CARD_MAX_W, viewport.w - CARD_SIDE * 2)
+  const cardLeft = (viewport.w - cardWidth) / 2
+  const maxCardH = Math.round(viewport.h * 0.5)
+  const cardH = Math.min(need, maxCardH)
+  const bottomCardBottom = viewport.dock - CARD_SIDE
+  const bottomCardTop = bottomCardBottom - cardH
+  const topCardBottom = viewport.top + cardH
+  const handRoom = via ? HAND_GAP : GAP
+  // The page between the top bar and the docked card: where a page target
+  // is scrolled to -- centred there when it fits, else its top just under
+  // the top bar (a long list shows its first rows).
+  const roomTop = Math.max(viewport.top, viewport.header + GAP)
+  const roomBottom = bottomCardTop - handRoom
+  const scrollWanted = spot
+    ? spot.height <= roomBottom - roomTop
+      ? spot.top - (roomTop + (roomBottom - roomTop - spot.height) / 2)
+      : spot.top - roomTop
+    : 0
+  const underBottomCard = !!spot && spot.top < bottomCardBottom && spot.top + spot.height > bottomCardTop - handRoom
+  const mode: "bottom" | "top" | "center" = !spot
+    ? "center"
+    : spot.inSheet ||
+        // Fixed down there (+, Search & Fix), or at the foot of a page that
+        // can't scroll it up out from under the card.
+        (underBottomCard && (spot.fixed || scrollWanted > viewport.scrollRoom + 4))
+      ? "top"
+      : "bottom"
+
+  // Scroll a page target into the room above the docked card: centred
+  // there when it fits, else its top just under the top bar (a long list
+  // shows its first rows). At most a couple of tries a step, so it can't
+  // fight a page that won't scroll that far.
   const autoScrolls = useRef(0)
   useEffect(() => {
-    if (!ready || !spot || spot.inSheet || !viewport.h || autoScrolls.current >= 2) return
-    const g = via ? HAND_GAP : GAP
-    const roomBelow = viewport.h - (spot.top + spot.height) - g - viewport.bottom
-    const roomAbove = spot.top - g - viewport.top
-    if (roomBelow >= need || roomAbove >= need) return
-    // The sticky top bar covers the page under it.
-    const header = document.querySelector("nav")
-    const topLimit = Math.max(viewport.top, (header?.getBoundingClientRect().bottom ?? 0) + 8)
-    const available = viewport.h - viewport.bottom - topLimit
-    // Whole target and caption fit: target just under the top bar, caption
-    // below. Too tall for that (a long list): caption on top, and the list
-    // starts under it -- its first rows lit, the rest cut off at the bottom
-    // bar.
-    const delta =
-      spot.fullHeight + g + need <= available ? spot.fullTop - topLimit : spot.fullTop - (topLimit + need + g)
-    if (Math.abs(delta) < 4) return
+    if (!ready || !spot || mode !== "bottom" || spot.fixed || !viewport.h || autoScrolls.current >= 2) return
+    if (spot.top >= roomTop && spot.top + spot.height <= roomBottom) return
+    if (Math.abs(scrollWanted) < 4) return
     autoScrolls.current += 1
-    window.scrollBy({ top: delta, behavior: "smooth" })
-  }, [ready, spot, need, via, viewport])
+    window.scrollBy({ top: scrollWanted, behavior: "smooth" })
+  }, [ready, spot, mode, roomTop, roomBottom, scrollWanted, viewport.h])
 
-  // The caption goes on whichever side of the spotlight has more room, and
-  // scrolls inside itself if even that isn't enough. Centred when there's
-  // nothing to point at.
-  const cardWidth = Math.min(340, viewport.w - MARGIN * 2)
-  // Room for the pointing hand between a control to tap and its caption.
-  const gap = via ? HAND_GAP : GAP
   let cardStyle: CSSProperties
-  // The lit area as drawn: the spot, cut back where a caption pinned over
-  // it would cover it (page targets only -- a form keeps its full outline).
-  let lit = spot
-  if (spot && viewport.w) {
-    const centre = spot.left + spot.width / 2
-    const left = Math.min(Math.max(centre - cardWidth / 2, MARGIN), viewport.w - cardWidth - MARGIN)
-    const roomBelow = viewport.h - (spot.top + spot.height) - gap - viewport.bottom
-    const roomAbove = spot.top - gap - viewport.top
-    const fitsBelow = roomBelow >= need
-    const fitsAbove = roomAbove >= need
-    if (fitsBelow || fitsAbove) {
-      cardStyle =
-        fitsBelow && (roomBelow >= roomAbove || !fitsAbove)
-          ? { left, top: spot.top + spot.height + gap, width: cardWidth, maxHeight: roomBelow }
-          : { left, bottom: viewport.h - spot.top + gap, width: cardWidth, maxHeight: roomAbove }
-    } else {
-      // No room for the whole caption beside it: pin it to a screen edge. In a
-      // sheet (the review forms) that's the top -- over the form's title --
-      // so its Approve button and bank line stay in view; on a page (the
-      // queue examples) whichever edge is further from the spotlight.
-      // Tall enough for a step's text plus its notification note without
-      // scrolling, while leaving the far end of the screen (a form's
-      // Approve button) in view.
-      const pinTop = spot.inSheet || spot.top + spot.height / 2 > viewport.h / 2
-      const maxHeight = Math.min(viewport.h - viewport.top - viewport.bottom, Math.max(viewport.h * 0.62, 380))
-      cardStyle = {
-        left: (viewport.w - cardWidth) / 2,
-        ...(pinTop ? { top: viewport.top } : { bottom: viewport.bottom }),
-        width: cardWidth,
-        maxHeight
-      }
-      if (!spot.inSheet) {
-        const cardH = Math.min(need, maxHeight)
-        const top = pinTop ? Math.max(spot.top, viewport.top + cardH + GAP) : spot.top
-        const bottom = pinTop ? spot.top + spot.height : Math.min(spot.top + spot.height, viewport.h - viewport.bottom - cardH - GAP)
-        if (bottom - top > 24) lit = { ...spot, top, height: bottom - top }
-      }
-    }
-  } else {
+  if (mode === "bottom") cardStyle = { left: cardLeft, width: cardWidth, bottom: viewport.h - bottomCardBottom, maxHeight: maxCardH }
+  else if (mode === "top") cardStyle = { left: cardLeft, width: cardWidth, top: viewport.top, maxHeight: maxCardH }
+  else
     cardStyle = {
-      left: "50%",
+      left: cardLeft,
+      width: cardWidth,
       top: "50%",
-      transform: "translate(-50%, -50%)",
-      width: cardWidth || 340,
+      transform: "translateY(-50%)",
       maxHeight: viewport.h ? viewport.h - viewport.top - viewport.bottom : undefined
     }
+
+  // The lit area as drawn: the spot, cut to what's visible -- between the
+  // top bar and the card, so a long list doesn't light up under either.
+  // A control fixed in place (the bottom bar, +) keeps its outline.
+  let lit = spot
+  if (spot && !spot.fixed) {
+    const top = Math.max(spot.top, mode === "top" ? topCardBottom + GAP : spot.inSheet ? spot.top : viewport.header)
+    const bottom = Math.min(spot.top + spot.height, mode === "bottom" ? bottomCardTop - GAP : viewport.h)
+    if (bottom - top > 24) lit = { ...spot, top, height: bottom - top }
   }
 
   // A dark page barely changes under a light dim, so dark mode dims harder
@@ -715,8 +758,18 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   // after the theme class is on <html>.)
   const dim = document.documentElement.classList.contains("dark") ? "rgba(0, 0, 0, 0.72)" : "rgba(0, 0, 0, 0.45)"
 
-  // The hand sits in the gap on the caption's side of the control.
-  const handAbove = !!spot && viewport.h - (spot.top + spot.height) < spot.top
+  // The pointing hand goes on whichever side of the control has more room
+  // (away from the card).
+  const handAbove =
+    !!spot &&
+    (mode === "bottom" ? bottomCardTop : viewport.h) - (spot.top + spot.height) <
+      spot.top - (mode === "top" ? topCardBottom : viewport.header)
+
+  const chapterIndex = CHAPTERS.findIndex((c) => c.index === index)
+  const eyebrow = step.chapter ? `Chapter ${chapterIndex + 1} of ${CHAPTERS.length}` : isLast ? "All done" : topicOf(index)
+  const caption = via ? via.hint : step.text
+  const primaryLabel = index === 0 ? "Start" : isLast ? "Done" : step.chapter ? "Let's go" : "Next"
+  const progress = ((index + 1) / STEPS.length) * 100
 
   return (
     <Portal>
@@ -759,9 +812,8 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           <div className="absolute inset-0 pointer-events-none" style={{ background: dim }} />
         )}
 
-        {/* Pointing hand on the control to tap, in the gap between it and
-            the caption -- below it, or above it near the bottom of the
-            screen (+, the bottom bar). */}
+        {/* Pointing hand on the control to tap, on its side away from the
+            card. */}
         {ready && spot && via && !tapping && (
           <span
             aria-hidden="true"
@@ -777,64 +829,98 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         )}
 
         {ready && (
-          // Text scrolls in its own area if it ever has to; the buttons sit
-          // in a fixed row underneath, so they're always in view.
           <div
-            className="absolute flex flex-col overflow-hidden bg-paper text-ink border border-hairline dark:border-white/20 rounded-2xl shadow-xl"
+            className="absolute flex flex-col overflow-hidden rounded-3xl border border-hairline dark:border-white/15 bg-paper text-ink shadow-2xl"
             style={cardStyle}
           >
-            <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain px-4 pt-4 pb-1">
-              <div className="flex items-start justify-between gap-3">
-                <p className="font-display font-semibold text-base leading-snug">
-                  {showTopics ? "Go to a topic" : via ? via.title : step.title}
+            {/* How far through the tour. */}
+            <div className="shrink-0 bg-hairline/70" style={{ height: PROGRESS_H }}>
+              <div className="h-full bg-gold motion-safe:transition-[width] motion-safe:duration-500" style={{ width: `${progress}%` }} />
+            </div>
+
+            {/* Text scrolls in its own area if it ever has to; the buttons
+                sit in a fixed row underneath, always in view. */}
+            <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain px-5 pt-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="min-w-0 truncate text-[11px] font-mono uppercase tracking-[0.16em] text-gold">
+                  {showMenu ? "Jump to" : eyebrow}
                 </p>
-                <span className="shrink-0 flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] font-mono text-ink-soft">
-                    {index + 1}/{STEPS.length}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowTopics((v) => !v)}
-                    aria-expanded={showTopics}
-                    className="text-[11px] font-mono text-gold border border-gold/60 rounded-full px-2 py-0.5"
-                  >
-                    {showTopics ? "Close" : "Topics ▾"}
-                  </button>
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowMenu((v) => !v)}
+                  aria-expanded={showMenu}
+                  aria-label={showMenu ? "Close the tour menu" : "Tour menu"}
+                  className="-mr-2 shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-ink-soft hover:bg-paper-2 hover:text-ink transition-colors"
+                >
+                  {showMenu ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.8" />
+                      <circle cx="12" cy="12" r="1.8" />
+                      <circle cx="19" cy="12" r="1.8" />
+                    </svg>
+                  )}
+                </button>
               </div>
 
-              {showTopics ? (
-                <ul className="mt-2 mb-3 -mx-1">
-                  {TOPICS.map((t) => {
-                    const current = topicOf(index) === t.name
-                    return (
-                      <li key={t.name}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowTopics(false)
-                            if (t.index !== index) go(t.index)
-                          }}
-                          className={`w-full flex items-center justify-between gap-3 px-2 py-2 rounded-lg text-left text-sm ${
-                            current ? "bg-gold/15 text-ink font-semibold" : "text-ink hover:bg-paper-2"
-                          }`}
-                        >
-                          <span>{t.name}</span>
-                          <span className="text-ink-soft">{current ? "You're here" : "→"}</span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
+              {showMenu ? (
+                <div className="pb-4">
+                  {MENU.map((group) => (
+                    <div key={group.chapter ?? "start"} className="mt-2">
+                      {group.chapter && (
+                        <p className="px-1 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.16em] text-ink-soft">{group.chapter}</p>
+                      )}
+                      <ul>
+                        {group.topics.map((t) => {
+                          const current = topicOf(index) === t.name
+                          return (
+                            <li key={t.name}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowMenu(false)
+                                  if (t.index !== index) go(t.index)
+                                }}
+                                className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-left text-[15px] ${
+                                  current ? "bg-gold/15 font-semibold" : "hover:bg-paper-2"
+                                }`}
+                              >
+                                <span>{t.name}</span>
+                                {current && <span className="text-[11px] font-mono text-gold">Here</span>}
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => go(null)}
+                    className="mt-3 w-full rounded-xl border border-hairline py-2.5 text-sm font-semibold text-ink-soft hover:text-ink"
+                  >
+                    End tour
+                  </button>
+                </div>
               ) : (
                 <>
-                  {(via ? via.hint : step.text) && (
-                    <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                      <Caption text={(via ? via.hint : step.text) ?? ""} />
+                  <h2
+                    className={`font-display font-semibold leading-snug ${
+                      step.chapter && !via ? "mt-2 text-[26px]" : "mt-1 text-[19px]"
+                    }`}
+                  >
+                    {via ? via.title : step.title}
+                  </h2>
+                  {caption && (
+                    <p className="mt-1.5 text-[15px] leading-relaxed text-ink-soft">
+                      <Caption text={caption} />
                     </p>
                   )}
                   {!via && step.notify && (
-                    <div className="mt-2">
+                    <div className="mt-2.5">
                       <button
                         type="button"
                         onClick={() => setShowNotify((v) => !v)}
@@ -843,12 +929,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                       >
                         <span aria-hidden="true">🔔</span>
                         Who gets notified
-                        <span aria-hidden="true" className={`text-[10px] transition-transform ${showNotify ? "rotate-90" : ""}`}>
+                        <span aria-hidden="true" className={`text-[9px] transition-transform ${showNotify ? "rotate-90" : ""}`}>
                           ▶
                         </span>
                       </button>
                       {showNotify && (
-                        <p className="mt-1.5 rounded-lg bg-gold/10 px-2.5 py-2 text-[13px] leading-snug text-ink">{step.notify}</p>
+                        <p className="mt-1.5 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">{step.notify}</p>
                       )}
                     </div>
                   )}
@@ -856,22 +942,18 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
               )}
             </div>
 
-            {!showTopics && (
-              <div ref={footRef} className="shrink-0 flex items-center gap-2 px-4 pb-4 pt-3">
-                {isLast && !via ? (
-                  <span className="mr-auto" />
-                ) : (
-                  <button type="button" onClick={() => go(null)} className="text-xs text-ink-soft px-1 py-2 mr-auto">
-                    Skip tour
-                  </button>
-                )}
+            {!showMenu && (
+              <div ref={footRef} className="shrink-0 flex items-center gap-3 px-5 pb-5 pt-4">
                 {index > 0 && (
                   <button
                     type="button"
                     onClick={() => go(index - 1)}
-                    className="border border-hairline text-ink-soft px-4 py-2 rounded-full text-sm font-semibold"
+                    aria-label="Back"
+                    className="shrink-0 w-11 h-11 rounded-full border border-hairline flex items-center justify-center text-ink-soft hover:text-ink transition-colors"
                   >
-                    Back
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+                      <path d="M15 18l-6-6 6-6" />
+                    </svg>
                   </button>
                 )}
                 {via ? (
@@ -879,7 +961,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                     type="button"
                     onClick={tap}
                     disabled={tapping}
-                    className="bg-gold text-paper px-5 py-2 rounded-full text-sm font-bold"
+                    className="ml-auto bg-gold text-paper px-7 h-11 rounded-full text-[15px] font-bold shadow-md"
                   >
                     Tap it
                   </button>
@@ -887,9 +969,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                   <button
                     type="button"
                     onClick={() => go(isLast ? null : index + 1)}
-                    className="bg-ink text-paper px-5 py-2 rounded-full text-sm font-bold"
+                    className="ml-auto bg-ink text-paper px-7 h-11 rounded-full text-[15px] font-bold shadow-md"
                   >
-                    {isLast ? "Done" : index === 0 ? "Start" : "Next"}
+                    {primaryLabel}
                   </button>
                 )}
               </div>
