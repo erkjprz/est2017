@@ -4,7 +4,19 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { useRouter } from "next/navigation"
 import { Portal } from "@/app/components/Portal"
 import { useAuth } from "@/app/auth-context"
-import { ADMIN_TOUR_CHANGE_EVENT, getAdminTourPhase, getAdminTourStep, setAdminTourPhase, setAdminTourStep } from "@/lib/adminTour"
+import {
+  ADMIN_TOUR_CHANGE_EVENT,
+  getAdminTourPhase,
+  getAdminTourStep,
+  getDoneRuns,
+  isAdminTourActive,
+  isTourChecklistHidden,
+  markRunDone,
+  setAdminTourPhase,
+  setAdminTourStep,
+  setTourChecklistHidden,
+  startAdminTourRun
+} from "@/lib/adminTour"
 
 // Guided tour for a new admin. It walks across the pages an admin works in,
 // dims each one, spotlights the real control, and puts a short caption next
@@ -48,6 +60,10 @@ function Caption({ text }: { text: string }) {
   )
 }
 
+// A numbered label the tour pins onto part of a form -- the caption refers
+// to it as ①, ② and so on.
+type Pin = { target: string; label: string }
+
 type Step = {
   id: string
   path: string
@@ -56,298 +72,316 @@ type Step = {
   // e.g. a form's "bank balance after" box, which sits in the sheet's footer.
   alsoShow?: string[]
   via?: Via[]
+  pins?: Pin[]
+  // The caption: one line, what to do or what this is.
   title: string
-  text: string
-  // Starts a topic in the caption's "Go to" list.
-  topic?: string
-  // A chapter card: a short divider that opens a group of topics (Every
-  // day, Every month, ...). No page of its own -- it shows over whichever
-  // page the tour is on.
-  chapter?: string
+  // The longer explanation, folded behind "Why?".
+  why?: string
   // The in-app notification this step leads to, and who gets it -- taken
   // from the database's notification triggers and the loan-payment-
   // reminders job, so keep it in step with them.
   notify?: string
 }
 
-// Written as "when this happens, here's what you do" rather than rules.
-const STEPS: Step[] = [
-  {
-    id: "welcome",
-    path: "/admin",
-    title: "Welcome, admin",
-    text: "Here's how things flow once you're an admin. Your approval moves the money. Tap [⋯] any time to jump to a subject.",
-    topic: "Welcome"
-  },
-  {
-    id: "chapter-daily",
-    path: "",
-    title: "Every day",
-    text: "The approval queue: what lands in it, and how to clear it.",
-    chapter: "Every day"
-  },
+// The mini-tours, in the order the checklist lists them. Each is a few
+// steps; their ids are what's remembered as done.
+type Run = { id: string; name: string; steps: Step[] }
+
+const RUNS: Run[] = [
   {
     id: "queue",
-    path: "/admin",
-    targets: ["queue-count"],
-    title: "Your approval queue",
-    text: "Everything waiting for an admin lands here: money members send in, money they ask for, and new signups.",
-    notify: "You get “Pending Approval” when a member sends something in, and “New Signup” when someone signs up.",
-    topic: "Your queue"
+    name: "Your queue",
+    steps: [
+      {
+        id: "queue",
+        path: "/admin",
+        targets: ["queue-count"],
+        title: "Everything waiting for you lands here.",
+        why: "Money members send in, money they ask for, and new signups.",
+        notify: "You get “Pending Approval” when a member sends something in, and “New Signup” when someone signs up."
+      },
+      {
+        id: "signup",
+        path: "/admin",
+        targets: ["queue-signup", "queue-count"],
+        title: "New members show up here. [Approve] once you know who they are.",
+        why: "Borrower accounts show under Borrower requests."
+      }
+    ]
   },
   {
-    id: "review-in",
-    path: "/admin",
-    targets: ["queue-confirmed", "queue-decision", "queue-count"],
-    title: "When something comes in",
-    text: "Contributions and loan payments are money already in the bank, so they only need confirming. When there’s more than one, you can bulk approve. [Reject] is one at a time. Red labels flag something to look at twice.",
-    topic: "Approving money in"
+    id: "money-in",
+    name: "Approve money in",
+    steps: [
+      {
+        id: "review-in",
+        path: "/admin",
+        targets: ["queue-confirmed", "queue-decision", "queue-count"],
+        title: "Money already in the bank only needs confirming.",
+        why: "Contributions and loan payments. Tick several to approve them together. [Reject] is one at a time. Red labels flag something to look at twice."
+      },
+      {
+        id: "form-contribution",
+        path: "/admin",
+        targets: ["review-form"],
+        alsoShow: ["review-impact"],
+        via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", optional: true }],
+        pins: [
+          { target: "pin-amount", label: "Amount" },
+          { target: "pin-bank", label: "Bank" },
+          { target: "pin-receipt", label: "Receipt" }
+        ],
+        title: "Match ① ② ③ with your bank app, then [Approve].",
+        why: "Your approval moves the money. The box above Approve shows each bank balance after.",
+        notify: "Approving sends the member “Contribution Approved”. Rejecting sends “Contribution Not Approved” with your reason."
+      },
+      {
+        id: "form-loan-payment",
+        path: "/admin",
+        targets: ["review-form"],
+        alsoShow: ["review-impact"],
+        via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", optional: true }],
+        pins: [
+          { target: "pin-context", label: "Left to pay" },
+          { target: "pin-amount", label: "Amount" },
+          { target: "pin-receipt", label: "Receipt" }
+        ],
+        title: "Match ② ③ with your bank app, then [Approve].",
+        why: "① is what's left on the loan. The payment comes off it.",
+        notify: "The member gets “Loan Payment Approved”, and payment reminders for that due date stop."
+      }
+    ]
   },
   {
-    id: "form-contribution",
-    path: "/admin",
-    targets: ["review-form"],
-    alsoShow: ["review-impact"],
-    via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Let's open a contribution to review.", optional: true }],
-    title: "Contribution",
-    text: "Check the amount, date and bank against the bank app and the member's receipt below. Above [Approve] you'll see the balance movements.",
-    notify: "Approving sends the member “Contribution Approved”. Rejecting sends “Contribution Not Approved” with your reason."
+    id: "money-out",
+    name: "Approve money out",
+    steps: [
+      {
+        id: "review-out",
+        path: "/admin",
+        targets: ["queue-decision-top", "queue-decision", "queue-confirmed", "queue-count"],
+        title: "Money going out is reviewed one at a time.",
+        why: "Withdrawals, loan releases and investment returns. For withdrawals and loans, send the money first, then approve.",
+        notify: "After you reject something, the member can fix it and resend it, and you're notified again."
+      },
+      {
+        id: "form-withdrawal",
+        path: "/admin",
+        targets: ["review-form"],
+        alsoShow: ["review-impact"],
+        via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", optional: true }],
+        pins: [
+          { target: "pin-context", label: "Available" },
+          { target: "pin-sendto", label: "Send to" },
+          { target: "review-details", label: "Bank & proof" }
+        ],
+        title: "Check ①, send to ②, fill in ③, then [Approve].",
+        why: "③ is the bank it left from and the transfer screenshot.",
+        notify: "The member gets “Withdrawal Approved”."
+      },
+      {
+        id: "form-investment-return",
+        path: "/admin",
+        targets: ["review-form"],
+        alsoShow: ["review-impact"],
+        via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", optional: true }],
+        pins: [
+          { target: "pin-amount", label: "Amount" },
+          { target: "pin-bank", label: "Bank" },
+          { target: "pin-receipt", label: "Receipt" }
+        ],
+        title: "Match ① ② ③ with the bank, then [Approve].",
+        notify: "If a member sent it in, they get “Investment Return Approved”."
+      }
+    ]
   },
   {
-    id: "form-loan-payment",
-    path: "/admin",
-    targets: ["review-form"],
-    alsoShow: ["review-impact"],
-    via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Now a loan payment to review.", optional: true }],
-    title: "Loan payment",
-    text: "The line at the top shows what's left on the loan. Check the amount against the bank and the member's receipt, then [Approve]. It comes off what's owed.",
-    notify: "The member gets “Loan Payment Approved”, and payment reminders for that due date stop."
-  },
-  {
-    id: "review-out",
-    path: "/admin",
-    targets: ["queue-decision-top", "queue-decision", "queue-confirmed", "queue-count"],
-    title: "When money goes out",
-    text: "Withdrawals, loan releases and investment returns are reviewed one at a time. For withdrawals and loans, send the money first, then [Approve].",
-    notify: "After you reject something, the member can fix it and resend it, and you're notified again.",
-    topic: "Approving money out"
-  },
-  {
-    id: "form-withdrawal",
-    path: "/admin",
-    targets: ["review-form"],
-    alsoShow: ["review-impact"],
-    via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Let's open a withdrawal to review.", optional: true }],
-    title: "Withdrawal",
-    text: "Check the amount against what's available at the top. Send it to the account under Send to, then pick the bank it left from and attach the transfer screenshot. [Approve] once both are in.",
-    notify: "The member gets “Withdrawal Approved”."
-  },
-  {
-    id: "form-loan-release",
-    path: "/admin",
-    targets: ["review-terms", "review-form"],
-    via: [{ path: "/admin", target: "example-loan-release", title: "Tap Ben's loan request", hint: "Now a loan request to review.", optional: true }],
-    title: "Loan request: the terms",
-    text: "Check the interest, term and first payment date. You can change them and [Save]. The fund check below shows if it fits the lending limits."
-  },
-  {
-    id: "form-loan-release-send",
-    path: "/admin",
-    targets: ["review-details", "review-form"],
-    alsoShow: ["review-impact"],
-    title: "Loan request: sending it",
-    text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. [Approve & activate] starts the loan today.",
-    notify: "Whoever sent the request gets “Loan Release Approved”. The borrower then gets reminders: “Due Soon” 3 days before each due date, “Due Today”, and “Overdue” every 10 days until paid. It's also posted to Telegram."
-  },
-  {
-    id: "form-investment-return",
-    path: "/admin",
-    targets: ["review-form"],
-    alsoShow: ["review-impact"],
-    via: [{ path: "/admin", target: "example-investment-return", title: "Tap the investment return", hint: "Now an investment return to review.", optional: true }],
-    title: "Investment return",
-    text: "Check the investment and the amount against the bank shown and the receipt. Then [Approve].",
-    notify: "If a member sent it in, they get “Investment Return Approved”."
-  },
-  {
-    id: "signup",
-    path: "/admin",
-    targets: ["queue-signup", "queue-count"],
-    title: "When someone signs up",
-    text: "Members show up under New signups, borrowers under Borrower requests. Once you know who they are, [Approve] them.",
-    topic: "Signups"
+    id: "loan-requests",
+    name: "Loan requests",
+    steps: [
+      {
+        id: "form-loan-release",
+        path: "/admin",
+        targets: ["review-terms", "review-form"],
+        via: [{ path: "/admin", target: "example-loan-release", title: "Tap Ben's loan request", optional: true }],
+        pins: [
+          { target: "pin-terms", label: "Terms" },
+          { target: "pin-fundcheck", label: "Fund check" }
+        ],
+        title: "Check ① and ②. Change the terms and [Save] if needed.",
+        why: "② shows whether it fits the lending limits. Going over warns but doesn't block."
+      },
+      {
+        id: "form-loan-release-send",
+        path: "/admin",
+        targets: ["review-details", "review-form"],
+        alsoShow: ["review-impact"],
+        pins: [
+          { target: "pin-sendto", label: "Send to" },
+          { target: "review-details", label: "Bank & proof" }
+        ],
+        title: "Send to ①, fill in ②, then [Approve & activate].",
+        why: "The loan starts today.",
+        notify: "Whoever sent the request gets “Loan Release Approved”. The borrower then gets reminders: “Due Soon” 3 days before each due date, “Due Today”, and “Overdue” every 10 days until paid. It's also posted to Telegram."
+      }
+    ]
   },
   {
     id: "messages",
-    path: "/messages",
-    targets: ["messages-list", "messages-title"],
-    via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon", hint: "Let's open member questions." }],
-    title: "When you or a member asks a question",
-    text: "It's a chat: members can message the admins, and you can message a member. Every conversation is here, and you reply right in the thread.",
-    notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”.",
-    topic: "Member questions"
+    name: "Member questions",
+    steps: [
+      {
+        id: "messages",
+        path: "/messages",
+        targets: ["messages-list", "messages-title"],
+        via: [{ path: "/admin", target: "messages", title: "Tap the Messages icon" }],
+        title: "Members' questions land here. Reply right in the thread.",
+        why: "You can also start a chat with a member.",
+        notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”."
+      }
+    ]
   },
   {
-    id: "chapter-monthly",
-    path: "",
-    title: "Every month",
-    text: "Recording bank interest and keeping a backup.",
-    chapter: "Every month"
+    id: "bank-interest",
+    name: "Bank interest",
+    steps: [
+      {
+        id: "interest-monthly",
+        path: "/dashboard",
+        targets: ["tx-details"],
+        alsoShow: ["tx-receipts"],
+        via: [
+          { path: "/dashboard", target: "new-fab", title: "Tap +", hint: "To record bank interest, start a new transaction." },
+          { target: "tx-type", title: "Tap Type" },
+          { target: "type-bank_interest", title: "Tap Bank Interest" }
+        ],
+        title: "Enter the amount, pick the bank, attach the statement, then [Submit].",
+        why: "Do this whenever a bank credits interest."
+      },
+      {
+        id: "interest-yearly",
+        path: "/fund-breakdown?tab=banks",
+        targets: ["bank-interest-due", "bank-total"],
+        via: [{ path: "/fund-breakdown", target: "tab-banks", title: "Tap the Banks tab" }],
+        title: "Once a year, open each bank and [Review & distribute].",
+        why: "In January, once December's interest is in for every bank, last year's total shows up here."
+      },
+      {
+        id: "interest-share",
+        path: "/fund-breakdown?tab=banks",
+        targets: ["example-split"],
+        title: "The app works out everyone's share.",
+        why: "It follows what each member had in the fund on Dec 31. Borrower accounts and anyone with [Shares in gains] off get none.",
+        notify: "When you confirm, each member gets “Bank Interest Distributed”."
+      }
+    ]
   },
   {
-    id: "interest-monthly",
-    path: "/dashboard",
-    targets: ["tx-details"],
-    alsoShow: ["tx-receipts"],
-    via: [
-      { path: "/dashboard", target: "new-fab", title: "Tap +", hint: "Let's record bank interest. Start a new transaction." },
-      { target: "tx-type", title: "Tap Type", hint: "Recording bank interest: choose the transaction type." },
-      { target: "type-bank_interest", title: "Tap Bank Interest", hint: "Recording bank interest: pick it from the Admin list." }
-    ],
-    title: "When a bank credits interest",
-    text: "Enter the amount, choose the bank and attach a screenshot of the statement, then [Submit].",
-    topic: "Bank interest"
+    id: "loans-investments",
+    name: "Loans & investments",
+    steps: [
+      {
+        id: "loans",
+        path: "/fund-breakdown?tab=loans",
+        targets: ["loans-attention", "loans-total"],
+        via: [
+          { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown" },
+          { target: "tab-loans", title: "Tap the Loans tab" }
+        ],
+        title: "Overdue and paid-off loans show here.",
+        why: "Follow up on an overdue one. Close a paid-off one so its gain is shared."
+      },
+      {
+        id: "loans-share",
+        path: "/fund-breakdown?tab=loans",
+        targets: ["example-split"],
+        title: "Closing a loan shares its interest for you.",
+        why: "Split by what each member had in the fund the day it closes. A borrower shares too, if they had money in.",
+        notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
+      },
+      {
+        id: "investments-share",
+        path: "/fund-breakdown?tab=investments",
+        targets: ["example-split"],
+        via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab" }],
+        title: "When an investment gains or loses, open it and [Review & distribute].",
+        why: "Split by what each member had in the fund on the date you pick. You can distribute more than once.",
+        notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”."
+      }
+    ]
   },
   {
-    id: "export",
-    path: "/admin",
-    targets: ["export"],
-    title: "At the end of each month",
-    text: "Download the full ledger here to keep a backup.",
-    topic: "Backups"
-  },
-  {
-    id: "chapter-sometimes",
-    path: "",
-    title: "Now and then",
-    text: "Fixing mistakes, closing loans, sharing investment gains and the year’s bank interest.",
-    chapter: "Now and then"
-  },
-  {
-    id: "fix",
-    path: "/admin",
-    targets: ["search-fix"],
-    title: "When something was recorded wrong",
-    text: "Find it here, correct it, and let the member know what changed.",
-    topic: "Fixing mistakes"
-  },
-  {
-    id: "loans",
-    path: "/fund-breakdown?tab=loans",
-    targets: ["loans-attention", "loans-total"],
-    via: [
-      { path: "/admin", target: "nav-breakdown", title: "Tap Breakdown", hint: "Let's check on loans. Open the fund breakdown." },
-      { target: "tab-loans", title: "Tap the Loans tab", hint: "Checking on loans: open the Loans tab." }
-    ],
-    title: "When a loan is overdue or paid off",
-    text: "It shows up here. Follow up with the borrower if it's overdue. If it's paid off, close it so the gain is shared.",
-    topic: "Loans"
-  },
-  {
-    id: "loans-share",
-    path: "/fund-breakdown?tab=loans",
-    targets: ["example-split"],
-    title: "How a loan's gain is shared",
-    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund.",
-    notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
-  },
-  {
-    id: "investments-share",
-    path: "/fund-breakdown?tab=investments",
-    targets: ["example-split"],
-    via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab", hint: "Let's look at investments." }],
-    title: "When an investment makes or loses money",
-    text: "Open it and tap [Review & distribute]. The gain or loss is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
-    notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”.",
-    topic: "Investments"
-  },
-  {
-    id: "interest-yearly",
-    path: "/fund-breakdown?tab=banks",
-    targets: ["bank-interest-due", "bank-total"],
-    via: [{ path: "/fund-breakdown", target: "tab-banks", title: "Tap the Banks tab", hint: "Let's look at the year's bank interest." }],
-    title: "At year end",
-    text: "Bank interest is shared out once a year. In January, once December's interest is in for every bank, last year's total shows up here. Open each bank and tap [Review & distribute].",
-    topic: "Year-end interest"
-  },
-  {
-    id: "interest-share",
-    path: "/fund-breakdown?tab=banks",
-    targets: ["example-split"],
-    title: "How bank interest is shared",
-    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with [Shares in gains] turned off get none.",
-    notify: "When you confirm, each member gets “Bank Interest Distributed”."
-  },
-  {
-    id: "chapter-settings",
-    path: "",
-    title: "Settings",
-    text: "Who’s in the fund, and how much it can lend.",
-    chapter: "Settings"
-  },
-  {
-    id: "members",
-    path: "/admin/members",
-    targets: ["members-add"],
-    via: [{ path: "/admin", target: "members", title: "Tap the Members icon", hint: "Let's open the member list." }],
-    title: "When someone joins or leaves",
-    text: "Add them with [+ Add]. To edit or deactivate someone, tap their name in the list.",
-    topic: "Members"
-  },
-  {
-    id: "lending-available",
-    path: "/admin/lending",
-    targets: ["lending-available"],
-    via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon", hint: "Let's open the lending limits." }],
-    title: "Available to lend",
-    text: "How much more can go out on loan: the Total loans limit's share of the fund, minus what's already out. The bar fills as loans go out.",
-    topic: "Lending limits"
+    id: "records",
+    name: "Members & records",
+    steps: [
+      {
+        id: "members",
+        path: "/admin/members",
+        targets: ["members-add"],
+        via: [{ path: "/admin", target: "members", title: "Tap the Members icon" }],
+        title: "Add someone with [+ Add]. Tap a name to edit or deactivate."
+      },
+      {
+        id: "fix",
+        path: "/admin",
+        targets: ["search-fix"],
+        title: "Recorded something wrong? Find it here and correct it.",
+        why: "Then let the member know what changed."
+      },
+      {
+        id: "export",
+        path: "/admin",
+        targets: ["export"],
+        title: "Download the full ledger each month as a backup."
+      }
+    ]
   },
   {
     id: "lending",
-    path: "/admin/lending",
-    targets: ["lending-limits"],
-    title: "When a loan is requested",
-    text: "Each request is checked against these limits. Going over shows a warning on the request but doesn't block it. Change the limits only when everyone agrees."
-  },
-  {
-    id: "lending-borrowers",
-    path: "/admin/lending",
-    targets: ["lending-borrowers"],
-    title: "Borrowers",
-    text: "Each borrower's unpaid loans plus any pending request, as a share of the fund. A share in red is over the Per borrower limit."
-  },
-  {
-    id: "lending-holds",
-    path: "/admin/lending",
-    targets: ["lending-holds"],
-    title: "Member holds",
-    text: "When a loan goes out, each member's share of it is on hold until it's repaid. The same goes for money in investments. Money on hold can't be withdrawn. The Member hold limit warns when a loan would tie up too much of anyone's money."
-  },
-  {
-    id: "done",
-    path: "/admin",
-    title: "You're all set",
-    text: "You can replay this tour any time from Help → Admin."
+    name: "Lending limits",
+    steps: [
+      {
+        id: "lending-available",
+        path: "/admin/lending",
+        targets: ["lending-available"],
+        via: [{ path: "/admin", target: "lending", title: "Tap the Lending limits icon" }],
+        title: "How much more can go out on loan.",
+        why: "The Total loans limit's share of the fund, minus what's already out."
+      },
+      {
+        id: "lending",
+        path: "/admin/lending",
+        targets: ["lending-limits"],
+        title: "Every loan request is checked against these.",
+        why: "Going over warns on the request but doesn't block it. Change them only when everyone agrees."
+      },
+      {
+        id: "lending-borrowers",
+        path: "/admin/lending",
+        targets: ["lending-borrowers"],
+        title: "Each borrower's share of the fund. Red is over the limit.",
+        why: "Unpaid loans plus any pending request, against the Per borrower limit."
+      },
+      {
+        id: "lending-holds",
+        path: "/admin/lending",
+        targets: ["lending-holds"],
+        title: "Money lent out or invested is on hold until it's back.",
+        why: "Money on hold can't be withdrawn. The Member hold limit warns when a loan would tie up too much of anyone's money."
+      }
+    ]
   }
 ]
 
-// The caption's "Go to" list: each topic and the step it starts on.
-const TOPICS = STEPS.flatMap((step, index) => (step.topic ? [{ name: step.topic, index }] : []))
+// Every step in one list -- what the stored step index points into.
+const STEPS: (Step & { run: Run; pos: number })[] = RUNS.flatMap((run) => run.steps.map((step, pos) => ({ ...step, run, pos })))
 
-function topicOf(index: number) {
-  return [...TOPICS].reverse().find((t) => t.index <= index)?.name ?? null
-}
-
-// The chapter cards, and the ⋯ menu: topics grouped under their chapter.
-const CHAPTERS = STEPS.flatMap((step, index) => (step.chapter ? [{ name: step.chapter, index }] : []))
-const MENU = TOPICS.reduce<{ chapter: string | null; topics: typeof TOPICS }[]>((groups, topic) => {
-  const chapter = [...CHAPTERS].reverse().find((c) => c.index <= topic.index)?.name ?? null
-  const last = groups[groups.length - 1]
-  if (last && last.chapter === chapter) last.topics.push(topic)
-  else groups.push({ chapter, topics: [topic] })
-  return groups
-}, [])
+export const TOUR_RUNS = RUNS.map((run) => ({
+  id: run.id,
+  name: run.name,
+  steps: run.steps.length,
+  first: STEPS.findIndex((s) => s.run === run)
+}))
 
 const PAD = 6
 // The card's height before it's first measured.
@@ -491,10 +525,17 @@ export function AdminTourHost() {
   // tour) goes straight to the step.
   const [forward, setForward] = useState(false)
 
+  // A run started from the checklist plays its first step's taps too.
+  const last = useRef<number | null>(null)
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- picks up a tour already under way (sessionStorage is only readable after hydration)
-    setIndex(getAdminTourStep())
-    const onChange = () => setIndex(getAdminTourStep())
+    last.current = getAdminTourStep()
+    setIndex(last.current)
+    const onChange = () => {
+      const next = getAdminTourStep()
+      if (last.current === null && next !== null) setForward(true)
+      last.current = next
+      setIndex(next)
+    }
     window.addEventListener(ADMIN_TOUR_CHANGE_EVENT, onChange)
     return () => window.removeEventListener(ADMIN_TOUR_CHANGE_EVENT, onChange)
   }, [])
@@ -515,7 +556,7 @@ export function AdminTourHost() {
 function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; go: (next: number | null) => void }) {
   const router = useRouter()
   const step = STEPS[index]
-  const isLast = index === STEPS.length - 1
+  const isLast = step.pos === step.run.steps.length - 1
   const [ready, setReady] = useState(false)
   const [spot, setSpot] = useState<Spot | null>(null)
   // The screen: its size, the safe edges a card stays inside of (status
@@ -532,10 +573,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const tapped = useRef<(() => void) | null>(null)
   const [tapping, setTapping] = useState(false)
   const tap = useCallback(() => tapped.current?.(), [])
-  // The ⋯ menu (topics by chapter, End tour), open in place of the text.
-  const [showMenu, setShowMenu] = useState(false)
-  // A step's notification note, folded into one line until tapped.
+  // The step's "Why?" and notification notes, folded until tapped.
+  const [showWhy, setShowWhy] = useState(false)
   const [showNotify, setShowNotify] = useState(false)
+  // Where the step's numbered pins sit on screen.
+  const [pins, setPins] = useState<{ n: number; label: string; top: number; left: number; width: number; height: number }[]>([])
+  const pinDefs = useRef<Pin[]>([])
   // The card's natural height (text plus buttons), measured after each
   // render, so the page can be scrolled to leave room for it.
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -544,7 +587,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   useLayoutEffect(() => {
     const natural = (bodyRef.current?.scrollHeight ?? 0) + (footRef.current?.offsetHeight ?? 0) + PROGRESS_H
     if (natural > PROGRESS_H && Math.abs(natural - need) > 1) setNeed(natural)
-  }, [need, ready, via, showMenu, showNotify, viewport.w])
+  }, [need, ready, via, showWhy, showNotify, viewport.w])
 
   const measure = useCallback(() => {
     const insets = safeInsets()
@@ -561,6 +604,14 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       dock: dockRect && dockRect.height > 0 ? dockRect.top : h - insets.bottom,
       scrollRoom: Math.max(0, document.documentElement.scrollHeight - (window.scrollY + h))
     })
+    setPins(
+      pinDefs.current.flatMap((pin, i) => {
+        const found = findTarget([pin.target])
+        if (!found) return []
+        const b = found.getBoundingClientRect()
+        return [{ n: i + 1, label: pin.label, top: b.top, left: b.left, width: b.width, height: b.height }]
+      })
+    )
     const el = target.current
     if (!el || !el.isConnected) {
       setSpot(null)
@@ -652,10 +703,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
 
       if (cancelled) return
       alsoShow.current = step.alsoShow ?? []
+      pinDefs.current = step.pins ?? []
       setAdminTourPhase("show")
-      // A chapter card has no page of its own: it shows over whichever
-      // page the tour is on.
-      if (step.path) await ensurePage(step.path)
+      await ensurePage(step.path)
       if (!step.targets) {
         point(null)
         setReady(true)
@@ -827,11 +877,15 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
     (mode === "bottom" ? bottomCardTop : viewport.h) - (spot.top + spot.height) <
       spot.top - (mode === "top" ? topCardBottom : viewport.header))
 
-  const chapterIndex = CHAPTERS.findIndex((c) => c.index === index)
-  const eyebrow = step.chapter ? `Chapter ${chapterIndex + 1} of ${CHAPTERS.length}` : isLast ? "All done" : topicOf(index)
-  const caption = via ? via.hint : step.text
-  const primaryLabel = index === 0 ? "Start" : isLast ? "Done" : step.chapter ? "Let's go" : "Next"
-  const progress = ((index + 1) / STEPS.length) * 100
+  const runLength = step.run.steps.length
+  const eyebrow = runLength > 1 ? `${step.run.name} · ${step.pos + 1} of ${runLength}` : step.run.name
+  const progress = ((step.pos + 1) / runLength) * 100
+  // The run's last step ticks it off the checklist and goes back to it.
+  const finish = () => {
+    markRunDone(step.run.id)
+    go(null)
+    if (window.location.pathname !== "/admin") router.push("/admin")
+  }
 
   return (
     <Portal>
@@ -908,12 +962,30 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           </span>
         )}
 
+        {/* Numbered pins on the parts of a form the caption refers to. */}
+        {ready && !via &&
+          pins.map((pin) => (
+            <div key={pin.n} className="pointer-events-none">
+              <div
+                className="absolute rounded-xl border-2 border-gold"
+                style={{ top: pin.top - 3, left: pin.left - 3, width: pin.width + 6, height: pin.height + 6 }}
+              />
+              <div
+                className="absolute flex items-center gap-1 rounded-full bg-gold pl-0.5 pr-2 py-0.5 text-[11px] font-bold text-paper shadow-md whitespace-nowrap"
+                style={{ top: pin.top - 12, left: Math.max(6, pin.left + 8) }}
+              >
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-paper text-[10px] text-gold">{pin.n}</span>
+                {pin.label}
+              </div>
+            </div>
+          ))}
+
         {ready && (
           <div
             className="absolute flex flex-col overflow-hidden rounded-3xl border border-hairline dark:border-white/15 bg-paper text-ink shadow-2xl"
             style={cardStyle}
           >
-            {/* How far through the tour. */}
+            {/* How far through this run. */}
             <div className="shrink-0 bg-hairline/70" style={{ height: PROGRESS_H }}>
               <div className="h-full bg-gold motion-safe:transition-[width] motion-safe:duration-500" style={{ width: `${progress}%` }} />
             </div>
@@ -922,143 +994,167 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                 sit in a fixed row underneath, always in view. */}
             <div ref={bodyRef} className="min-h-0 overflow-y-auto overscroll-contain px-4 pt-2">
               <div className="flex items-center justify-between gap-3">
-                <p className="min-w-0 truncate text-[11px] font-mono uppercase tracking-[0.16em] text-gold">
-                  {showMenu ? "Jump to" : eyebrow}
-                </p>
+                <p className="min-w-0 truncate text-[11px] font-mono uppercase tracking-[0.16em] text-gold">{eyebrow}</p>
                 <button
                   type="button"
-                  onClick={() => setShowMenu((v) => !v)}
-                  aria-expanded={showMenu}
-                  aria-label={showMenu ? "Close the tour menu" : "Tour menu"}
+                  onClick={() => go(null)}
+                  aria-label="End this tour"
                   className="-mr-2 shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-ink-soft hover:bg-paper-2 hover:text-ink transition-colors"
                 >
-                  {showMenu ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true">
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5" aria-hidden="true">
-                      <circle cx="5" cy="12" r="1.8" />
-                      <circle cx="12" cy="12" r="1.8" />
-                      <circle cx="19" cy="12" r="1.8" />
-                    </svg>
-                  )}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
                 </button>
               </div>
-
-              {showMenu ? (
-                <div className="pb-4">
-                  {MENU.map((group) => (
-                    <div key={group.chapter ?? "start"} className="mt-2">
-                      {group.chapter && (
-                        <p className="px-1 pt-2 pb-1 text-[10px] font-mono uppercase tracking-[0.16em] text-ink-soft">{group.chapter}</p>
-                      )}
-                      <ul>
-                        {group.topics.map((t) => {
-                          const current = topicOf(index) === t.name
-                          return (
-                            <li key={t.name}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShowMenu(false)
-                                  if (t.index !== index) go(t.index)
-                                }}
-                                className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-left text-[15px] ${
-                                  current ? "bg-gold/15 font-semibold" : "hover:bg-paper-2"
-                                }`}
-                              >
-                                <span>{t.name}</span>
-                                {current && <span className="text-[11px] font-mono text-gold">Here</span>}
-                              </button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => go(null)}
-                    className="mt-3 w-full rounded-xl border border-hairline py-2.5 text-sm font-semibold text-ink-soft hover:text-ink"
-                  >
-                    End tour
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <h2
-                    className={`font-display font-semibold leading-snug ${
-                      step.chapter && !via ? "mt-1 text-[24px]" : "text-[17px]"
-                    }`}
-                  >
-                    {via ? via.title : step.title}
-                  </h2>
-                  {caption && (
-                    <p className="mt-1 text-[14px] leading-normal text-ink-soft">
-                      <Caption text={caption} />
-                    </p>
-                  )}
-                  {!via && step.notify && showNotify && (
-                    <p className="mt-2 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">
-                      <span aria-hidden="true">🔔 </span>
-                      {step.notify}
-                    </p>
-                  )}
-                </>
+              <h2 className="font-display font-semibold leading-snug text-[17px]">
+                <Caption text={via ? via.title : step.title} />
+              </h2>
+              {via?.hint && <p className="mt-0.5 text-[14px] leading-normal text-ink-soft">{via.hint}</p>}
+              {!via && step.why && (
+                <button
+                  type="button"
+                  onClick={() => setShowWhy((v) => !v)}
+                  aria-expanded={showWhy}
+                  className="mt-1 text-[13px] font-semibold text-gold"
+                >
+                  Why? {showWhy ? "▴" : "▾"}
+                </button>
+              )}
+              {!via && step.why && showWhy && (
+                <p className="mt-1 text-[14px] leading-normal text-ink-soft">
+                  <Caption text={step.why} />
+                </p>
+              )}
+              {!via && step.notify && showNotify && (
+                <p className="mt-2 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">
+                  <span aria-hidden="true">🔔 </span>
+                  {step.notify}
+                </p>
               )}
             </div>
 
-            {!showMenu && (
-              <div ref={footRef} className="shrink-0 flex items-center gap-2 px-4 pb-3.5 pt-3">
-                {index > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => go(index - 1)}
-                    aria-label="Back"
-                    className="shrink-0 w-10 h-10 rounded-full border border-hairline flex items-center justify-center text-ink-soft hover:text-ink transition-colors"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
-                      <path d="M15 18l-6-6 6-6" />
-                    </svg>
-                  </button>
-                )}
-                {!via && step.notify && (
-                  <button
-                    type="button"
-                    onClick={() => setShowNotify((v) => !v)}
-                    aria-expanded={showNotify}
-                    className={`shrink-0 h-10 px-3.5 rounded-full border flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${
-                      showNotify ? "border-gold bg-gold/15 text-ink" : "border-hairline text-ink-soft"
-                    }`}
-                  >
-                    <span aria-hidden="true">🔔</span>
-                    Notified
-                  </button>
-                )}
-                {via ? (
-                  <button
-                    type="button"
-                    onClick={tap}
-                    disabled={tapping}
-                    className="ml-auto bg-gold text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
-                  >
-                    Tap it
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => go(isLast ? null : index + 1)}
-                    className="ml-auto bg-ink text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
-                  >
-                    {primaryLabel}
-                  </button>
-                )}
-              </div>
-            )}
+            <div ref={footRef} className="shrink-0 flex items-center gap-2 px-4 pb-3.5 pt-3">
+              {step.pos > 0 && (
+                <button
+                  type="button"
+                  onClick={() => go(index - 1)}
+                  aria-label="Back"
+                  className="shrink-0 w-10 h-10 rounded-full border border-hairline flex items-center justify-center text-ink-soft hover:text-ink transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+                    <path d="M15 18l-6-6 6-6" />
+                  </svg>
+                </button>
+              )}
+              {!via && step.notify && (
+                <button
+                  type="button"
+                  onClick={() => setShowNotify((v) => !v)}
+                  aria-expanded={showNotify}
+                  aria-label="Who gets notified"
+                  className={`shrink-0 h-10 px-3.5 rounded-full border flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${
+                    showNotify ? "border-gold bg-gold/15 text-ink" : "border-hairline text-ink-soft"
+                  }`}
+                >
+                  <span aria-hidden="true">🔔</span>
+                  Notified
+                </button>
+              )}
+              {via ? (
+                <button
+                  type="button"
+                  onClick={tap}
+                  disabled={tapping}
+                  className="ml-auto bg-gold text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
+                >
+                  Tap it
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => (isLast ? finish() : go(index + 1))}
+                  className="ml-auto bg-ink text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
+                >
+                  {isLast ? "Done" : "Next"}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
     </Portal>
+  )
+}
+
+// "Learn the ropes" on /admin: the mini-tours as a checklist. Tapping one
+// runs it; finishing it ticks it off. Hides once every one is done, or
+// when the admin closes it (Help → Admin brings it back).
+export function AdminTourChecklist() {
+  const [state, setState] = useState<{ done: string[]; hidden: boolean; active: boolean } | null>(null)
+  useEffect(() => {
+    const update = () => setState({ done: getDoneRuns(), hidden: isTourChecklistHidden(), active: isAdminTourActive() })
+    update()
+    window.addEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
+    return () => window.removeEventListener(ADMIN_TOUR_CHANGE_EVENT, update)
+  }, [])
+  if (!state || state.hidden || state.active) return null
+  const doneCount = TOUR_RUNS.filter((r) => state.done.includes(r.id)).length
+  if (doneCount === TOUR_RUNS.length) return null
+  const nextId = TOUR_RUNS.find((r) => !state.done.includes(r.id))?.id
+
+  return (
+    <section className="card mt-4 overflow-hidden border-gold/40" aria-label="Learn the ropes">
+      <div className="flex items-center gap-3 px-4 pt-3.5">
+        <p className="flex-1 font-display font-semibold">Learn the ropes</p>
+        <span className="font-mono text-[11px] text-gold">
+          {doneCount} of {TOUR_RUNS.length}
+        </span>
+        <button
+          type="button"
+          onClick={() => setTourChecklistHidden(true)}
+          aria-label="Hide Learn the ropes (Help → Admin brings it back)"
+          className="-mr-2 w-8 h-8 rounded-full flex items-center justify-center text-ink-soft hover:bg-paper-2 hover:text-ink transition-colors"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
+      <p className="px-4 text-xs text-ink-soft">Short walkthroughs of what admins do. Tap one to start.</p>
+      <div className="mx-4 mt-2.5 mb-1 h-1 rounded-full bg-hairline overflow-hidden">
+        <div className="h-full bg-gold motion-safe:transition-[width] motion-safe:duration-500" style={{ width: `${(doneCount / TOUR_RUNS.length) * 100}%` }} />
+      </div>
+      <ul className="divide-y divide-hairline">
+        {TOUR_RUNS.map((run) => {
+          const done = state.done.includes(run.id)
+          const next = run.id === nextId
+          return (
+            <li key={run.id}>
+              <button
+                type="button"
+                onClick={() => startAdminTourRun(run.id, run.first)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${next ? "bg-gold/10" : "hover:bg-paper-2"}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`w-5 h-5 shrink-0 rounded-full border-[1.5px] flex items-center justify-center text-[11px] ${
+                    done ? "bg-sage border-sage text-paper" : next ? "border-gold" : "border-ink-soft/50"
+                  }`}
+                >
+                  {done ? "✓" : ""}
+                </span>
+                <span className={`flex-1 min-w-0 text-sm ${done ? "text-ink-soft" : next ? "font-semibold text-ink" : "text-ink"}`}>
+                  {run.name}
+                  {done && <span className="sr-only"> (done)</span>}
+                </span>
+                <span className={`shrink-0 font-mono text-[11px] ${next ? "text-gold" : "text-ink-soft"}`}>
+                  {next ? "Start ›" : done ? "Replay" : `${run.steps} ${run.steps === 1 ? "step" : "steps"}`}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

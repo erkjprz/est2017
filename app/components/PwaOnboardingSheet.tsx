@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import { Sheet } from "@/app/components/Sheet"
 import { useAuth } from "@/app/auth-context"
-import { hasSeenAdminTour, isAdminTourActive } from "@/lib/adminTour"
+import { isAdminTourActive } from "@/lib/adminTour"
 import { isPushSupported, subscribeToPush } from "@/lib/push"
 import {
   type OnboardingStep,
@@ -87,9 +87,8 @@ export function PwaOnboardingSheet() {
     if (!eligible || step) return
 
     function evaluate() {
-      // Don't stack this on top of the admin tour, or on a new admin's
-      // first /admin visit, where the tour is about to start.
-      if (isAdminTourActive() || (pathname === "/admin" && !hasSeenAdminTour())) return
+      // Don't stack this on top of a running admin tour.
+      if (isAdminTourActive()) return
       const next = pickStep()
       if (!next) return
       setStartedAtInstall(next === "install")

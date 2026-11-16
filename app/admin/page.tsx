@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import Navbar from "@/app/components/Navbar"
@@ -50,8 +50,7 @@ import { FirstPaymentField } from "@/app/components/FirstPaymentField"
 import { fetchWithdrawable, type Withdrawable } from "@/lib/withdrawable"
 import { checkLoanRequest, fetchLendingPosition, type LendingPosition } from "@/lib/lendingLimits"
 import { FundCheckCard } from "@/app/components/admin/FundCheckCard"
-import { hasSeenAdminTour, isAdminTourActive, startAdminTour } from "@/lib/adminTour"
-import { useAdminTourStep } from "@/app/components/admin/AdminTour"
+import { AdminTourChecklist, useAdminTourStep } from "@/app/components/admin/AdminTour"
 import {
   EXAMPLE_TXN_PREFIX,
   ExampleQueueHeading,
@@ -253,29 +252,15 @@ export default function AdminPage() {
   // Only fetched while a Loan Release is waiting -- see loadQueueContext.
   const [lendingPosition, setLendingPosition] = useState<LendingPosition | null>(null)
 
-  // First-visit guided tour for a new admin (see AdminTour, mounted in the
-  // root layout). Starts by itself once per device; Help starts it again
-  // directly. Its spotlight targets are the data-tour="..." attributes below.
-  // Decided once per visit, so a later re-render can't pop it open on top
-  // of something else.
-  const tourDecided = useRef(false)
+  // The admin tour (see AdminTour, mounted in the root layout): a "Learn
+  // the ropes" checklist of mini-tours here on /admin. Its spotlight
+  // targets are the data-tour="..." attributes below.
   // While the tour is on the steps about reviewing (not its first look,
   // which shows the real, usually empty, queue, nor its last), an empty
   // queue gets example items so the spotlight has something to land on
   // (see TourExamples).
   const { id: tourStepId, showing: tourStepShowing } = useAdminTourStep()
   const tourExamples = tourStepId !== null && ["review-", "form-", "signup"].some((p) => tourStepId.startsWith(p))
-  useEffect(() => {
-    if (tourDecided.current || checkingAccess || member?.role !== "admin") return
-    tourDecided.current = true
-    const params = new URLSearchParams(window.location.search)
-    // Never restart a tour that's already running: this only runs once the
-    // queue has loaded, by which point the admin may have moved on in it.
-    // A ?signup= / ?review= link is there to open one item's review sheet
-    // (see below) -- don't cover it with the tour; it'll show next visit.
-    if (hasSeenAdminTour() || isAdminTourActive() || params.has("signup") || params.has("review")) return
-    startAdminTour()
-  }, [checkingAccess, member])
 
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
@@ -1133,6 +1118,8 @@ export default function AdminPage() {
           {exportError && (
             <p className="mt-1.5 text-xs text-rust text-right">Couldn&apos;t export: {exportError}</p>
           )}
+          {/* New admins' mini-tours (see AdminTour). */}
+          <AdminTourChecklist />
 
           {loadError && (
             <p className="mt-4 text-sm text-rust">Couldn&apos;t load some data: {loadError}</p>
@@ -1727,12 +1714,14 @@ export default function AdminPage() {
               if (!flags.length && !context) return null
               return (
                 <div className="px-1 pt-2 space-y-1.5">
-                  {context && <p className="text-xs font-mono text-ink">{context}</p>}
+                  {context && <p data-tour="pin-context" className="text-xs font-mono text-ink">{context}</p>}
                   {flags.length > 0 && <FlagChips flags={flags} />}
                 </div>
               )
             })()}
 
+            {/* data-tour pin-*: what the tour's numbered pins point at. */}
+            <div data-tour="pin-amount">
             {isConfirmedMoney ? (
               <div className="text-center py-6">
                 <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-1">Amount</p>
@@ -1747,6 +1736,7 @@ export default function AdminPage() {
                 label="Amount"
               />
             )}
+            </div>
 
             {needsLoanBank && (() => {
               const isAmountInterest = t.loans?.interest_type === "amount"
@@ -1757,7 +1747,7 @@ export default function AdminPage() {
               return (
                 <div data-tour="review-terms" className="-mt-2 mb-4">
                   <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Loan terms</p>
-                  <div className="card divide-y divide-hairline overflow-hidden">
+                  <div data-tour="pin-terms" className="card divide-y divide-hairline overflow-hidden">
                     <FieldRow icon={<InterestIcon />}>
                       {isAmountInterest || customRate ? (
                         <input
@@ -1834,7 +1824,11 @@ export default function AdminPage() {
                   </div>
                   {(() => {
                     const check = loanCheckFor(t)
-                    return check && lendingPosition ? <FundCheckCard check={check} limits={lendingPosition.limits} /> : null
+                    return check && lendingPosition ? (
+                      <div data-tour="pin-fundcheck">
+                        <FundCheckCard check={check} limits={lendingPosition.limits} />
+                      </div>
+                    ) : null
                   })()}
                   {termPicker === "rate" && (
                     <InterestRatePickerSheet
@@ -1895,7 +1889,7 @@ export default function AdminPage() {
             {(payoutDetails || payoutQrPath) && (
               <div className="mb-4">
                 <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Send to</p>
-                <div className="card px-4 py-3.5 space-y-3">
+                <div data-tour="pin-sendto" className="card px-4 py-3.5 space-y-3">
                   {payoutDetails && (
                     <p className="text-sm text-ink whitespace-pre-line break-words">{payoutDetails}</p>
                   )}
@@ -2030,16 +2024,18 @@ export default function AdminPage() {
                     types where the bank is already settled, not being
                     picked in this same sheet. */}
                 {!needsLoanBank && !needsWithdrawalBank && (
-                  <p className="text-sm text-ink-soft">
+                  <p data-tour="pin-bank" className="text-sm text-ink-soft w-fit">
                     Bank: {t.bank_accounts?.account_name || t.bank_accounts?.bank_name || "None"}
                   </p>
                 )}
                 {receiptPaths(t).length > 0 && (
+                  <div data-tour="pin-receipt">
                   <ReceiptThumbs
                     paths={receiptPaths(t)}
                     label={isConfirmedMoney || t.classification === "Investment Return" ? "Member's receipt" : "Receipt"}
                     onOpen={(index) => setOpenReceipt({ paths: receiptPaths(t), index })}
                   />
+                  </div>
                 )}
               </div>
             )}
