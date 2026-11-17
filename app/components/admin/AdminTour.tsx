@@ -226,10 +226,19 @@ const STEPS: Step[] = [
   {
     id: "fix",
     path: "/admin",
-    targets: ["search-fix"],
+    targets: ["fix-results"],
+    via: [{ path: "/admin", target: "search-fix", title: "Tap Search & Fix", hint: "To fix something that was recorded wrong, open Search & Fix." }],
     title: "When something was recorded wrong",
-    text: "Find it here, correct it, and let the member know what changed.",
+    text: "Search by member, amount, date or bank, then tap the entry.",
     topic: "Fixing mistakes"
+  },
+  {
+    id: "fix-form",
+    path: "/admin",
+    targets: ["fix-form"],
+    via: [{ target: "example-fix", title: "Tap Maria's contribution", optional: true }],
+    title: "Fixing it",
+    text: "Correct it, tap [Save fix], then tell the member."
   },
   {
     id: "on-behalf",

@@ -264,6 +264,12 @@ export default function AdminPage() {
   // queue gets example items so the spotlight has something to land on
   // (see TourExamples).
   const { id: tourStepId, showing: tourStepShowing } = useAdminTourStep()
+  // The tour opens Search & Fix on its "fix" steps; going back out of them
+  // (Back, or jumping to another subject) closes it again.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- follows the tour, which lives outside React state
+    if (tourStepId && !tourStepId.startsWith("fix")) setShowSearchFix(false)
+  }, [tourStepId])
   const tourExamples = tourStepId !== null && ["review-", "form-", "signup"].some((p) => tourStepId.startsWith(p))
   useEffect(() => {
     if (tourDecided.current || checkingAccess || member?.role !== "admin") return
