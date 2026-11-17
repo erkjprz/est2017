@@ -32,6 +32,8 @@ import {
 } from "@/app/components/TransactionFormUI"
 import { TRANSACTION_TYPE_LABELS as typeLabels } from "@/lib/transactionLabels"
 import { Sheet } from "@/app/components/Sheet"
+import { useAdminTourStep } from "@/app/components/admin/AdminTour"
+import { EXAMPLE_TXN_PREFIX } from "@/app/components/admin/TourExamples"
 
 // Same in/out vocabulary as the transaction edit sheet's own FLOW map --
 // this panel deals in raw classification strings the same way, just with
@@ -183,7 +185,35 @@ export function SupportPanel() {
   const fmt = (n: number) =>
     Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-  const editingTxn = transactions.find((t) => t.transaction_id === editingId) ?? null
+  // The admin tour's Search & Fix steps: an example search with one
+  // result, and (on its second step) that result's fix form. The example
+  // can't be saved (see save below).
+  const { id: tourStepId, showing: tourShowing } = useAdminTourStep()
+  const tourSearch = tourStepId === "fix" || tourStepId === "fix-form"
+  const tourExample = useMemo(
+    () => ({
+      transaction_id: `${EXAMPLE_TXN_PREFIX}fix`,
+      classification: "Member Contribution",
+      status: "approved",
+      amount: 1000,
+      txn_date: "2026-11-02",
+      description: "November contribution",
+      members: { name: "Maria Santos" },
+      bank_account_id: banks[0]?.id ?? null,
+      bank_accounts: banks[0] ?? null,
+      receipt_urls: []
+    }),
+    [banks]
+  )
+  const shownQuery = tourSearch ? "Maria" : query
+  const shownResults = tourSearch ? [tourExample] : results
+
+  const editingTxn =
+    tourStepId === "fix-form" && tourShowing
+      ? tourExample
+      : tourSearch
+        ? null
+        : (transactions.find((t) => t.transaction_id === editingId) ?? null)
 
   // Collapsed once there's an actual query, not just on focus -- focusing
   // alone (before typing anything) has no results to show yet, so hiding
@@ -191,7 +221,7 @@ export function SupportPanel() {
   // keyboard instead of the results it was meant to make room for. Once
   // you start typing, the intro isn't useful anymore and results fill
   // that space instead.
-  const searchActive = query.trim().length > 0
+  const searchActive = shownQuery.trim().length > 0
 
   // min-h keeps the sheet itself from resizing when the intro collapses
   // or results come and go -- Sheet's own panel has no explicit height,
@@ -210,31 +240,35 @@ export function SupportPanel() {
         </p>
       )}
 
-      {loading && <p className="text-sm text-ink-soft">Loading…</p>}
-      {loadError && <p className="text-sm text-rust">Couldn&apos;t load transactions: {loadError}</p>}
+      {loading && !tourSearch && <p className="text-sm text-ink-soft">Loading…</p>}
+      {loadError && !tourSearch && <p className="text-sm text-rust">Couldn&apos;t load transactions: {loadError}</p>}
 
-      {!loading && !loadError && (
-        <>
+      {((!loading && !loadError) || tourSearch) && (
+        // data-tour: the admin tour's Search & Fix step points here.
+        <div data-tour="fix-results">
           <input
             className="border border-hairline bg-paper-2 text-ink text-sm rounded-md px-3 py-2.5 w-full"
             placeholder="Search by member, bank, description, amount, date…"
-            value={query}
+            value={shownQuery}
             onChange={(e) => setQuery(e.target.value)}
+            readOnly={tourSearch}
           />
 
-          {query.trim() && (
+          {shownQuery.trim() && (
             <p className="text-xs text-ink-soft mt-2">
-              {results.length} match{results.length === 1 ? "" : "es"}
-              {results.length === 30 ? " (showing first 30)" : ""}
+              {shownResults.length} match{shownResults.length === 1 ? "" : "es"}
+              {shownResults.length === 30 ? " (showing first 30)" : ""}
             </p>
           )}
 
           <div className="mt-3 flex flex-col gap-3">
-            {results.map((t) => (
-              <SupportRow key={t.transaction_id} t={t} fmt={fmt} onOpen={() => setEditingId(t.transaction_id)} />
+            {shownResults.map((t) => (
+              <div key={t.transaction_id} data-tour={t === tourExample ? "example-fix" : undefined}>
+                <SupportRow t={t} fmt={fmt} onOpen={() => setEditingId(t.transaction_id)} />
+              </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {/* Fixing a row opens as its own sheet, stacked on top of this one
@@ -342,6 +376,10 @@ function SupportEditForm({
 
 
   async function save() {
+    if (t.transaction_id.startsWith(EXAMPLE_TXN_PREFIX)) {
+      setMessage("This is the tour's example -- there's nothing to save.")
+      return
+    }
     const amountNum = Number(amount)
     if (amount.trim() === "" || Number.isNaN(amountNum)) {
       setMessage("Enter a valid amount.")
@@ -515,6 +553,8 @@ function SupportEditForm({
         </>
       }
     >
+      {/* data-tour: the admin tour's fix-form step points here. */}
+      <div data-tour="fix-form">
       <div className="card overflow-hidden">
         <FieldRow icon={<FlowBadge {...(FLOW[t.classification] ?? { arrow: "•", tone: "in" })} small />}>
           <span className="flex-1 min-w-0 text-sm">
@@ -622,6 +662,7 @@ function SupportEditForm({
           existingPaths={keptReceipts}
           onRemoveExisting={(path) => setKeptReceipts((prev) => prev.filter((p) => p !== path))}
         />
+      </div>
       </div>
     </Sheet>
   )

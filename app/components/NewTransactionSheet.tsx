@@ -906,7 +906,9 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
   // types are all entries attributed to no one member (see handleSubmit),
   // not something done "for" a specific member the way a Contribution can
   // be.
+  // data-tour: the admin tour's "Recording for a member" step points here.
   const onBehalfOfField = isAdmin && supportsOnBehalfOf && (
+    <div data-tour="tx-on-behalf">
     <FieldRow icon={<PersonIcon />}>
       <select className={rowSelectClass} value={onBehalfOfId} onChange={(e) => handleOnBehalfChange(e.target.value)}>
         <option value="">Myself</option>
@@ -919,6 +921,7 @@ export function NewTransactionSheet({ onClose, onSaved }: { onClose: () => void;
           ))}
       </select>
     </FieldRow>
+    </div>
   )
 
   const investmentField = isInvestmentEntry && (

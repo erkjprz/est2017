@@ -100,7 +100,7 @@ const STEPS: Step[] = [
     path: "/admin",
     targets: ["queue-confirmed", "queue-decision", "queue-count"],
     title: "When something comes in",
-    text: "Contributions and loan payments are money already in the bank, so they only need confirming. When there’s more than one, you can bulk approve. [Reject] is one at a time. Red labels flag something to look at twice.",
+    text: "Money already in the bank only needs confirming. Approve several at once, [Reject] one at a time. Red labels mean look twice.",
     topic: "Approving money in"
   },
   {
@@ -110,7 +110,7 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-contribution", title: "Tap Maria's contribution", hint: "Let's open a contribution to review.", optional: true }],
     title: "Contribution",
-    text: "Check the amount, date and bank against the bank app and the member's receipt below. Above [Approve] you'll see the balance movements.",
+    text: "Check the amount, date and bank against your bank app and the receipt, then [Approve].",
     notify: "Approving sends the member “Contribution Approved”. Rejecting sends “Contribution Not Approved” with your reason."
   },
   {
@@ -120,7 +120,7 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-loan-payment", title: "Tap Ana's loan payment", hint: "Now a loan payment to review.", optional: true }],
     title: "Loan payment",
-    text: "The line at the top shows what's left on the loan. Check the amount against the bank and the member's receipt, then [Approve]. It comes off what's owed.",
+    text: "Check the amount against the bank and receipt, then [Approve]. It comes off what's left on the loan.",
     notify: "The member gets “Loan Payment Approved”, and payment reminders for that due date stop."
   },
   {
@@ -139,7 +139,7 @@ const STEPS: Step[] = [
     alsoShow: ["review-impact"],
     via: [{ path: "/admin", target: "example-withdrawal", title: "Tap Jose's withdrawal", hint: "Let's open a withdrawal to review.", optional: true }],
     title: "Withdrawal",
-    text: "Check the amount against what's available at the top. Send it to the account under Send to, then pick the bank it left from and attach the transfer screenshot. [Approve] once both are in.",
+    text: "Send it to the account under Send to, then add the bank it left from and the transfer screenshot.",
     notify: "The member gets “Withdrawal Approved”."
   },
   {
@@ -220,16 +220,36 @@ const STEPS: Step[] = [
     id: "chapter-sometimes",
     path: "",
     title: "Now and then",
-    text: "Fixing mistakes, closing loans, sharing investment gains and the year’s bank interest.",
+    text: "Fixing mistakes, recording for a member, closing loans, sharing investment gains and the year’s bank interest.",
     chapter: "Now and then"
   },
   {
     id: "fix",
     path: "/admin",
-    targets: ["search-fix"],
+    targets: ["fix-results"],
+    via: [{ path: "/admin", target: "search-fix", title: "Tap Search & Fix", hint: "To fix something that was recorded wrong, open Search & Fix." }],
     title: "When something was recorded wrong",
-    text: "Find it here, correct it, and let the member know what changed.",
+    text: "Search by member, amount, date or bank, then tap the entry.",
     topic: "Fixing mistakes"
+  },
+  {
+    id: "fix-form",
+    path: "/admin",
+    targets: ["fix-form"],
+    via: [{ target: "example-fix", title: "Tap Maria's contribution", optional: true }],
+    title: "Fixing it",
+    text: "Correct it, tap [Save fix], then tell the member."
+  },
+  {
+    id: "on-behalf",
+    path: "/dashboard",
+    targets: ["tx-on-behalf"],
+    via: [
+      { path: "/dashboard", target: "new-fab", title: "Tap +", hint: "To record something for a member, start a new transaction." }
+    ],
+    title: "When you record it for a member",
+    text: "Pick who it's for here. Contributions and loan payments are approved right away. Withdrawals and loan requests still need approving.",
+    topic: "Recording for a member"
   },
   {
     id: "loans",
@@ -248,7 +268,7 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=loans",
     targets: ["example-split"],
     title: "How a loan's gain is shared",
-    text: "Nothing to do beyond closing the loan. The interest it earned is split the same way: by what each member had in the fund on the day it closes. A member who borrowed shares too, if they had money in the fund.",
+    text: "Nothing to do beyond closing it. Its interest is split by what each member had in the fund that day, borrowers included.",
     notify: "When you close it, each member gets “Loan Gain Distributed” (or “Loan Loss Allocated”)."
   },
   {
@@ -257,7 +277,7 @@ const STEPS: Step[] = [
     targets: ["example-split"],
     via: [{ path: "/fund-breakdown", target: "tab-investments", title: "Tap the Investments tab", hint: "Let's look at investments." }],
     title: "When an investment makes or loses money",
-    text: "Open it and tap [Review & distribute]. The gain or loss is split by what each member had in the fund on the date you pick. You can distribute more than once as returns come in.",
+    text: "Open it and tap [Review & distribute]. It's split by what each member had in the fund on the date you pick.",
     notify: "Each member gets “Investment Gain Distributed” or “Investment Loss Allocated”.",
     topic: "Investments"
   },
@@ -275,7 +295,7 @@ const STEPS: Step[] = [
     path: "/fund-breakdown?tab=banks",
     targets: ["example-split"],
     title: "How bank interest is shared",
-    text: "Nothing to do here, the app works it out. Each member's share follows what they had in the fund on Dec 31: more in the fund, bigger share. Borrower accounts and anyone with [Shares in gains] turned off get none.",
+    text: "Nothing to do here. Shares follow what each member had in the fund on Dec 31. Borrowers and anyone with [Shares in gains] off get none.",
     notify: "When you confirm, each member gets “Bank Interest Distributed”."
   },
   {
@@ -322,7 +342,7 @@ const STEPS: Step[] = [
     path: "/admin/lending",
     targets: ["lending-holds"],
     title: "Member holds",
-    text: "When a loan goes out, each member's share of it is on hold until it's repaid. The same goes for money in investments. Money on hold can't be withdrawn. The Member hold limit warns when a loan would tie up too much of anyone's money."
+    text: "Each member's share of a loan or investment is on hold, and can't be withdrawn, until it's back. The limit warns before a loan ties up too much."
   },
   {
     id: "done",
@@ -352,7 +372,8 @@ const MENU = TOPICS.reduce<{ chapter: string | null; topics: typeof TOPICS }[]>(
 const PAD = 6
 // The card's height before it's first measured.
 const MIN_CARD_ROOM = 200
-const GAP = 12
+// Space between the spotlight and the caption card.
+const GAP = 22
 const HAND_GAP = 52
 const MARGIN = 16
 // The caption card: widest it gets, its side gap, its progress bar.
@@ -408,14 +429,15 @@ function findTarget(targets: string[] | undefined): HTMLElement | null {
 
 // Brings the target into view: centred, or for something taller than half
 // the screen, its top just under the sticky header so the caption still
-// has room below it.
+// has room below it. Instantly -- a smooth scroll made the spotlight glide
+// in late behind it.
 function reveal(el: HTMLElement) {
   const r = el.getBoundingClientRect()
   if (r.height > window.innerHeight * 0.45) {
     // Works inside a scrolling sheet too, unlike scrolling the window.
     el.style.scrollMarginTop = "72px"
-    el.scrollIntoView({ block: "start", behavior: "smooth" })
-  } else el.scrollIntoView({ block: "center", behavior: "smooth" })
+    el.scrollIntoView({ block: "start", behavior: "instant" })
+  } else el.scrollIntoView({ block: "center", behavior: "instant" })
 }
 
 // What scrolls at this point of the screen, looking past the tour's own
@@ -601,7 +623,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         const value = get()
         if (value) return value
         if (Date.now() - started > timeoutMs) return null
-        await sleep(150)
+        await sleep(50)
       }
       return null
     }
@@ -616,6 +638,16 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       target.current = el
       if (el) reveal(el)
       measure()
+      // A sheet slides up as it opens, which no scroll or resize event
+      // reports: follow the target every frame for a moment, so the
+      // spotlight moves with it instead of landing late.
+      const until = Date.now() + 700
+      const follow = () => {
+        if (cancelled || target.current !== el) return
+        measure()
+        if (Date.now() < until) requestAnimationFrame(follow)
+      }
+      if (el) requestAnimationFrame(follow)
     }
 
     async function run() {
@@ -624,8 +656,10 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
         for (const v of step.via ?? []) {
           if (v.path) await ensurePage(v.path)
           // A page that's still loading (Admin's header icons wait for its
-          // queue) gets longer before the tap is skipped.
-          const el = await waitFor(() => findTarget([v.target]), v.optional ? 1500 : 10000)
+          // queue) gets longer before the tap is skipped. An optional one
+          // (an example card, hidden whenever the real queue has items) is
+          // given up on quickly -- the step shows its example form anyway.
+          const el = await waitFor(() => findTarget([v.target]), v.optional ? 400 : 10000)
           if (cancelled) return
           if (!el) break
           point(el)
@@ -638,7 +672,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           tapped.current = null
           if (cancelled) return
           setTapping(true)
-          await sleep(450)
+          await sleep(150)
           if (cancelled) return
           const clickable = el.matches("button, a") ? el : el.querySelector<HTMLElement>("button, a") ?? el
           clickable.click()
@@ -646,7 +680,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
           setVia(null)
           setReady(false)
           point(null)
-          await sleep(400)
+          // Just long enough for the tap to take effect (a tab switching,
+          // a page starting to load) before looking for what's next.
+          await sleep(100)
         }
       }
 
@@ -774,12 +810,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
       if (spot.top >= roomTop && spot.top + spot.height <= roomBottom) return
       if (Math.abs(scrollWanted) < 4) return
       autoScrolls.current += 1
-      scrollBy(null, scrollWanted, true)
+      scrollBy(null, scrollWanted)
     } else if (mode === "top" && spot.inSheet && target.current) {
       const wanted = spot.top - (topCardBottom + GAP)
       if (wanted >= -4) return
       autoScrolls.current += 1
-      scrollBy(scrollerOf(target.current), wanted, true)
+      scrollBy(scrollerOf(target.current), wanted)
     }
   }, [ready, spot, mode, roomTop, roomBottom, scrollWanted, topCardBottom, viewport.h])
 
@@ -831,6 +867,9 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
   const eyebrow = step.chapter ? `Chapter ${chapterIndex + 1} of ${CHAPTERS.length}` : isLast ? "All done" : topicOf(index)
   const caption = via ? via.hint : step.text
   const primaryLabel = index === 0 ? "Start" : isLast ? "Done" : step.chapter ? "Let's go" : "Next"
+  const isChapter = !!step.chapter && !via
+  // What a chapter card lists: the subjects in it.
+  const chapterTopics = isChapter ? (MENU.find((g) => g.chapter === step.chapter)?.topics ?? []) : []
   const progress = ((index + 1) / STEPS.length) * 100
 
   return (
@@ -889,7 +928,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
             )}
           </div>
         ) : (
-          <div className="absolute inset-0 pointer-events-none" style={{ background: dim }} />
+          <div
+            // A chapter card covers the page completely: it's a title page
+            // for what comes next, not about whatever page is underneath.
+            className={`absolute inset-0 pointer-events-none ${isChapter ? "bg-background" : ""}`}
+            style={isChapter ? undefined : { background: dim }}
+          />
         )}
 
         {/* Pointing hand on the control to tap, on its side away from the
@@ -988,16 +1032,24 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
               ) : (
                 <>
                   <h2
-                    className={`font-display font-semibold leading-snug ${
-                      step.chapter && !via ? "mt-1 text-[24px]" : "text-[17px]"
-                    }`}
+                    className={`font-display font-semibold leading-snug ${isChapter ? "mt-3 text-[32px] leading-tight" : "text-[17px]"}`}
                   >
                     {via ? via.title : step.title}
                   </h2>
                   {caption && (
-                    <p className="mt-1 text-[14px] leading-normal text-ink-soft">
+                    <p className={`mt-1 leading-normal text-ink-soft ${isChapter ? "text-[15px]" : "text-[14px]"}`}>
                       <Caption text={caption} />
                     </p>
+                  )}
+                  {isChapter && chapterTopics.length > 0 && (
+                    <ul className="mt-4 mb-1 border-t border-hairline">
+                      {chapterTopics.map((t) => (
+                        <li key={t.name} className="flex items-center gap-2.5 border-b border-hairline py-2.5 text-[15px]">
+                          <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-gold" />
+                          {t.name}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                   {!via && step.notify && showNotify && (
                     <p className="mt-2 rounded-xl bg-gold/10 px-3 py-2 text-[13px] leading-snug text-ink">
