@@ -9,6 +9,7 @@ import { SkeletonCardList } from "@/app/components/Skeleton"
 import { readCache, writeCache } from "@/lib/cache"
 import { Sheet } from "@/app/components/Sheet"
 import { Toast } from "@/app/components/Toast"
+import { useAdminTourStep } from "@/app/components/admin/AdminTour"
 import { FieldRow, PersonIcon, MailIcon, rowSelectClass, rowInputClass } from "@/app/components/TransactionFormUI"
 import {
   ConfirmSheet,
@@ -67,6 +68,9 @@ export default function AdminMembersPage() {
 
   const [openId, setOpenId] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  // The admin tour's gain-sharing step shows an example edit form.
+  const { id: tourStep, showing: tourShowing } = useAdminTourStep()
+  const tourGainSharing = tourShowing && tourStep === "members-share"
   const [confirmingDeactivate, setConfirmingDeactivate] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -367,6 +371,16 @@ export default function AdminMembersPage() {
         >
           {error && <p className="mt-4 px-1 text-sm text-rust">{error}</p>}
         </PersonSheet>
+      )}
+
+      {tourGainSharing && (
+        <EditPersonSheet
+          example
+          person={{ member_id: "example-maria", name: "Maria Santos", email: "maria@email.com", role: "member", status: "approved", gain_sharing_eligible: true }}
+          onClose={() => {}}
+          onSaved={() => {}}
+          onError={() => {}}
+        />
       )}
 
       {openPersonRow && editing && (

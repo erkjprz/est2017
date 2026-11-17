@@ -1899,7 +1899,8 @@ export default function AdminPage() {
             {/* Where the member or borrower asked for the money to go -- set on
                 their loan request, or on the withdrawal itself. */}
             {(payoutDetails || payoutQrPath) && (
-              <div className="mb-4">
+              // data-tour: lit up along with Details on the tour's loan-sending step.
+              <div data-tour="review-sendto" className="mb-4">
                 <p className="text-[11px] uppercase tracking-wide text-ink-soft font-mono mb-2 px-1">Send to</p>
                 <div className="card px-4 py-3.5 space-y-3">
                   {payoutDetails && (

@@ -277,11 +277,14 @@ const primaryButton =
 
 export function EditPersonSheet({
   person,
+  example,
   onClose,
   onSaved,
   onError
 }: {
   person: Person
+  // The admin tour's example: shown, never saved.
+  example?: boolean
   onClose: () => void
   onSaved: () => void
   onError: (message: string) => void
@@ -298,6 +301,7 @@ export function EditPersonSheet({
   const gainSharingLocked = role === "borrower" || status === "inactive"
 
   async function save() {
+    if (example) return
     setSaving(true)
     try {
       await updatePerson(person.member_id, {
@@ -325,7 +329,7 @@ export function EditPersonSheet({
         </button>
       }
     >
-      <div className="card divide-y divide-hairline overflow-hidden">
+      <div data-tour="edit-person" className="card divide-y divide-hairline overflow-hidden">
         <FieldRow icon={<PersonIcon />}>
           <input className={rowInputClass} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         </FieldRow>
@@ -365,7 +369,8 @@ export function EditPersonSheet({
         </FieldRow>
       </div>
 
-      <label className="flex items-start gap-2.5 text-sm text-ink-soft px-1 pt-4">
+      {/* data-tour: the admin tour's gain-sharing step points here. */}
+      <label data-tour="gain-sharing" className="flex items-start gap-2.5 text-sm text-ink-soft px-1 pt-4">
         <input
           type="checkbox"
           checked={gainSharingLocked ? false : gainSharing}

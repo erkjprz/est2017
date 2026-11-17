@@ -154,9 +154,9 @@ const STEPS: Step[] = [
     id: "form-loan-release-send",
     path: "/admin",
     targets: ["review-details", "review-form"],
-    alsoShow: ["review-impact"],
+    alsoShow: ["review-sendto"],
     title: "Loan request: sending it",
-    text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. [Approve & activate] starts the loan today.",
+    text: "Send it to the account under Send to, then add the bank it left from and the transfer screenshot. [Approve & activate] starts the loan today.",
     notify: "Whoever sent the request gets “Loan Release Approved”. The borrower then gets reminders: “Due Soon” 3 days before each due date, “Due Today”, and “Overdue” every 10 days until paid. It's also posted to Telegram."
   },
   {
@@ -186,6 +186,21 @@ const STEPS: Step[] = [
     text: "It's a chat: members can message the admins, and you can message a member. Every conversation is here, and you reply right in the thread.",
     notify: "A member's message notifies every admin. Your reply notifies the member: “Message from the admins”.",
     topic: "Member questions"
+  },
+  {
+    id: "messages-new",
+    path: "/messages",
+    targets: ["compose-form"],
+    via: [{ target: "messages-new", title: "Tap + New", hint: "To message a member yourself, start a new chat." }],
+    title: "Starting a chat",
+    text: "Pick a member, add a subject, write your message."
+  },
+  {
+    id: "messages-link",
+    path: "/messages",
+    targets: ["compose-txn"],
+    title: "When it's about a transaction",
+    text: "Tap [+ Link a transaction] to pick it. Or open it on Transactions and tap [Message …] to start a chat already linked to it."
   },
   {
     id: "chapter-monthly",
@@ -313,6 +328,14 @@ const STEPS: Step[] = [
     title: "When someone joins or leaves",
     text: "Add them with [+ Add]. To edit or deactivate someone, tap their name in the list.",
     topic: "Members"
+  },
+  {
+    id: "members-share",
+    path: "/admin/members",
+    targets: ["edit-person"],
+    alsoShow: ["gain-sharing"],
+    title: "Who shares in gains",
+    text: "Set in each person's Edit details. Untick Shares in gains to leave someone out without deactivating them. Borrowers never share."
   },
   {
     id: "lending-available",
@@ -1093,7 +1116,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                     type="button"
                     onClick={tap}
                     disabled={tapping}
-                    className="ml-auto bg-gold text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
+                    className="ml-auto bg-gold text-[#1b1608] px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
                   >
                     Tap it
                   </button>
@@ -1101,9 +1124,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                   <button
                     type="button"
                     onClick={() => go(isLast ? null : index + 1)}
-                    className="ml-auto bg-ink text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
+                    // Gold, with an arrow: the tour's own button, so it isn't
+                    // mistaken for the page's (Approve and the like are ink).
+                    className="ml-auto inline-flex items-center gap-1.5 bg-gold text-[#1b1608] pl-5 pr-4 h-10 rounded-full text-[15px] font-bold shadow-md"
                   >
                     {primaryLabel}
+                    <span aria-hidden="true">{isLast ? "✓" : "→"}</span>
                   </button>
                 )}
               </div>
