@@ -188,6 +188,21 @@ const STEPS: Step[] = [
     topic: "Member questions"
   },
   {
+    id: "messages-new",
+    path: "/messages",
+    targets: ["compose-form"],
+    via: [{ target: "messages-new", title: "Tap + New", hint: "To message a member yourself, start a new chat." }],
+    title: "Starting a chat",
+    text: "Pick a member, add a subject, write your message."
+  },
+  {
+    id: "messages-link",
+    path: "/messages",
+    targets: ["compose-txn"],
+    title: "When it's about a transaction",
+    text: "Tap [+ Link a transaction] to pick it. Or open it on Transactions and tap [Message …] to start a chat already linked to it."
+  },
+  {
     id: "chapter-monthly",
     path: "",
     title: "Every month",

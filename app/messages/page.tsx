@@ -12,7 +12,7 @@ import { AttachButton, PendingAttachments } from "@/app/components/ChatAttachmen
 import { TransactionPickerSheet } from "@/app/components/TransactionPickerSheet"
 import { TransactionRow, cardDate, describeTransaction, type Txn } from "@/app/components/transactions/TransactionParts"
 import { readCache, writeCache } from "@/lib/cache"
-import { useAdminTourStepId } from "@/app/components/admin/AdminTour"
+import { useAdminTourStep, useAdminTourStepId } from "@/app/components/admin/AdminTour"
 import { ExampleConversation } from "@/app/components/admin/TourExamples"
 import {
   ATTACHMENTS_MAX,
@@ -109,7 +109,17 @@ function MessagesInbox() {
     deepLinkKey && deepLinkKey !== dismissedTo
       ? { key: deepLinkKey, to: isAdmin ? preselectedMemberId : null, txn: linkedTransactionId }
       : null
-  const compose = newCompose !== null ? { key: `new-${newCompose}`, to: null, txn: null } : deepLink
+  // The admin tour's compose steps open an example compose sheet (see
+  // ComposeSheet's `example`), which can't send.
+  const { id: tourStep, showing: tourShowing } = useAdminTourStep()
+  const tourCompose = tourShowing && (tourStep === "messages-new" || tourStep === "messages-link")
+  const compose = tourCompose
+    ? { key: "tour-example", to: null, txn: null, example: true }
+    : newCompose !== null
+      ? { key: `new-${newCompose}`, to: null, txn: null, example: false }
+      : deepLink
+        ? { ...deepLink, example: false }
+        : null
 
   function closeCompose() {
     setNewCompose(null)
@@ -174,7 +184,12 @@ function MessagesInbox() {
               </p>
             </div>
             <button
+              data-tour="messages-new"
               onClick={() => {
+                // On the tour's compose step only its example opens (just
+                // below), so the spotlight isn't left on a sheet that's
+                // swapped out right after.
+                if (tourStep === "messages-new") return
                 // Opening + New also retires a still-pending deep link.
                 if (deepLinkKey) closeCompose()
                 setNewCompose(Date.now())
@@ -259,6 +274,7 @@ function MessagesInbox() {
           selfId={member.member_id}
           preselectedMemberId={compose.to}
           transactionId={compose.txn}
+          example={compose.example}
           onClose={closeCompose}
           onStarted={(id) => router.push(`/messages/${id}`)}
         />
@@ -267,11 +283,24 @@ function MessagesInbox() {
   )
 }
 
+// The admin tour's example message (see ComposeSheet's `example`).
+const EXAMPLE_RECIPIENT: MemberOption = { member_id: "example-maria", name: "Maria Santos", role: "member" }
+const EXAMPLE_TXN: Txn = {
+  transaction_id: "example-message",
+  classification: "Member Contribution",
+  status: "approved",
+  amount: 1000,
+  txn_date: "2026-11-02",
+  members: { name: "Maria Santos" },
+  bank_accounts: { bank_name: "BDO", account_name: "BDO" }
+}
+
 function ComposeSheet({
   isAdmin,
   selfId,
   preselectedMemberId,
   transactionId,
+  example,
   onClose,
   onStarted
 }: {
@@ -279,19 +308,23 @@ function ComposeSheet({
   selfId: string
   preselectedMemberId: string | null
   transactionId: string | null
+  // The admin tour's example: filled in, and it can't send.
+  example?: boolean
   onClose: () => void
   onStarted: (conversationId: string) => void
 }) {
-  const [members, setMembers] = useState<MemberOption[]>([])
-  const [recipientId, setRecipientId] = useState(preselectedMemberId ?? "")
-  const [subject, setSubject] = useState("")
-  const [body, setBody] = useState("")
+  const [members, setMembers] = useState<MemberOption[]>(example ? [EXAMPLE_RECIPIENT] : [])
+  const [recipientId, setRecipientId] = useState(example ? EXAMPLE_RECIPIENT.member_id : (preselectedMemberId ?? ""))
+  const [subject, setSubject] = useState(example ? transactionSubject(EXAMPLE_TXN) : "")
+  const [body, setBody] = useState(
+    example ? "Hi Maria, the receipt for this one shows ₱1,500, but it was recorded as ₱1,000. Which is right?" : ""
+  )
   const [files, setFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
   // The transaction the thread will be about (optional) -- arrives with a
   // "?txn=" link or is picked here.
-  const [transaction, setTransaction] = useState<Txn | null>(null)
+  const [transaction, setTransaction] = useState<Txn | null>(example ? EXAMPLE_TXN : null)
   const [loadingTransaction, setLoadingTransaction] = useState(!!transactionId)
   const [pickingTransaction, setPickingTransaction] = useState(false)
   // The subject last filled in from a transaction, so picking another (or
@@ -324,7 +357,7 @@ function ComposeSheet({
   }, [transactionId])
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isAdmin || example) return
     supabase
       .from("members")
       .select("member_id, name, role")
@@ -332,13 +365,17 @@ function ComposeSheet({
       .neq("member_id", selfId)
       .order("name")
       .then(({ data }) => setMembers(data ?? []))
-  }, [isAdmin, selfId])
+  }, [isAdmin, selfId, example])
 
   const targetId = isAdmin ? recipientId : selfId
   const canSend = !loadingTransaction && !!targetId && subject.trim().length > 0 && (body.trim().length > 0 || files.length > 0) && !sending
 
   async function send() {
     if (!canSend) return
+    if (example) {
+      setError("This is the tour's example -- nothing is sent.")
+      return
+    }
     setSending(true)
     setError("")
     const { data, error } = await startConversationWithAttachments(targetId, selfId, subject, body, files, transaction?.transaction_id)
@@ -372,7 +409,8 @@ function ComposeSheet({
         </button>
       }
     >
-      <div className="space-y-3">
+      {/* data-tour: the admin tour's compose steps point here. */}
+      <div data-tour="compose-form" className="space-y-3">
         {isAdmin && (
           <label className="block">
             <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">To</span>
@@ -395,7 +433,7 @@ function ComposeSheet({
             </select>
           </label>
         )}
-        <div>
+        <div data-tour="compose-txn">
           <span className="block text-xs uppercase tracking-wide text-ink-soft font-mono mb-1.5">
             About a transaction <span className="normal-case tracking-normal">(optional)</span>
           </span>
