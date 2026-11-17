@@ -1093,7 +1093,7 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                     type="button"
                     onClick={tap}
                     disabled={tapping}
-                    className="ml-auto bg-gold text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
+                    className="ml-auto bg-gold text-[#1b1608] px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
                   >
                     Tap it
                   </button>
@@ -1101,9 +1101,12 @@ function TourOverlay({ index, playVia, go }: { index: number; playVia: boolean; 
                   <button
                     type="button"
                     onClick={() => go(isLast ? null : index + 1)}
-                    className="ml-auto bg-ink text-paper px-6 h-10 rounded-full text-[15px] font-bold shadow-md"
+                    // Gold, with an arrow: the tour's own button, so it isn't
+                    // mistaken for the page's (Approve and the like are ink).
+                    className="ml-auto inline-flex items-center gap-1.5 bg-gold text-[#1b1608] pl-5 pr-4 h-10 rounded-full text-[15px] font-bold shadow-md"
                   >
                     {primaryLabel}
+                    <span aria-hidden="true">{isLast ? "✓" : "→"}</span>
                   </button>
                 )}
               </div>
