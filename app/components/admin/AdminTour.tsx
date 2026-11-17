@@ -154,9 +154,9 @@ const STEPS: Step[] = [
     id: "form-loan-release-send",
     path: "/admin",
     targets: ["review-details", "review-form"],
-    alsoShow: ["review-impact"],
+    alsoShow: ["review-sendto"],
     title: "Loan request: sending it",
-    text: "Send the money to the account under Send to, pick the bank it left from and attach the transfer screenshot. [Approve & activate] starts the loan today.",
+    text: "Send it to the account under Send to, then add the bank it left from and the transfer screenshot. [Approve & activate] starts the loan today.",
     notify: "Whoever sent the request gets “Loan Release Approved”. The borrower then gets reminders: “Due Soon” 3 days before each due date, “Due Today”, and “Overdue” every 10 days until paid. It's also posted to Telegram."
   },
   {
