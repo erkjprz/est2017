@@ -330,6 +330,14 @@ const STEPS: Step[] = [
     topic: "Members"
   },
   {
+    id: "members-share",
+    path: "/admin/members",
+    targets: ["edit-person"],
+    alsoShow: ["gain-sharing"],
+    title: "Who shares in gains",
+    text: "Set in each person's Edit details. Untick Shares in gains to leave someone out without deactivating them. Borrowers never share."
+  },
+  {
     id: "lending-available",
     path: "/admin/lending",
     targets: ["lending-available"],
